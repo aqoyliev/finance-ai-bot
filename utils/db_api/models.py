@@ -1,0 +1,78 @@
+from datetime import datetime
+from typing import Optional
+
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column
+
+from .base import Base
+
+# All money is stored in minor units (amount * 100) as integers to avoid float errors.
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)  # Telegram user id
+    username: Mapped[str] = mapped_column(String, default="")
+    salary_day: Mapped[int] = mapped_column(Integer, default=1)
+    base_currency: Mapped[str] = mapped_column(String(3), default="UZS")
+    created_at: Mapped[datetime] = mapped_column(DateTime)
+
+
+class Account(Base):
+    __tablename__ = "accounts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    name: Mapped[str] = mapped_column(String)
+    kind: Mapped[str] = mapped_column(String)  # cash | debit | credit
+    currency: Mapped[str] = mapped_column(String(3), default="UZS")
+    # For credit accounts the balance is a negative liability (debt = -balance)
+    balance_minor: Mapped[int] = mapped_column(BigInteger, default=0)
+    credit_limit_minor: Mapped[int] = mapped_column(BigInteger, default=0)
+    is_active: Mapped[bool] = mapped_column(default=True)
+
+
+class Category(Base):
+    __tablename__ = "categories"
+    __table_args__ = (UniqueConstraint("user_id", "name", "kind"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    name: Mapped[str] = mapped_column(String)
+    kind: Mapped[str] = mapped_column(String)  # expense | income
+
+
+class Subcategory(Base):
+    __tablename__ = "subcategories"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    category_id: Mapped[int] = mapped_column(ForeignKey("categories.id"), index=True)
+    name: Mapped[str] = mapped_column(String)
+
+
+class Transaction(Base):
+    __tablename__ = "transactions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    # One purchase paid from several accounts shares a single group_id
+    group_id: Mapped[str] = mapped_column(String, index=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"))
+    kind: Mapped[str] = mapped_column(String)  # expense | income
+    amount_minor: Mapped[int] = mapped_column(BigInteger)
+    currency: Mapped[str] = mapped_column(String(3))
+    category: Mapped[Optional[str]] = mapped_column(String)
+    subcategory: Mapped[Optional[str]] = mapped_column(String)
+    note: Mapped[Optional[str]] = mapped_column(String)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime, index=True)
+
+
+class ExchangeRate(Base):
+    __tablename__ = "exchange_rates"
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    from_currency: Mapped[str] = mapped_column(String(3), primary_key=True)
+    to_currency: Mapped[str] = mapped_column(String(3), primary_key=True)
+    rate: Mapped[str] = mapped_column(String)  # Decimal as string
+    updated_at: Mapped[datetime] = mapped_column(DateTime)

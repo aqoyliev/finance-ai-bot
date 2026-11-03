@@ -1,3 +1,11 @@
 aiogram~=2.25
 environs~=8.0.0
 marshmallow<4  # environs 8.0.0 is incompatible with marshmallow 4.x (it removed __version__)
+
+sqlalchemy[asyncio]~=2.0
+aiosqlite~=0.20
+alembic~=1.13
+openai~=1.40
+pydantic~=2.7
+fastapi~=0.111
+uvicorn[standard]~=0.29
