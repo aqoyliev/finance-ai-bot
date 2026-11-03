@@ -1,7 +1,7 @@
 """Recording, editing and deleting operations (expenses, incomes, transfers).
 
 record_operation / record_transfer are the single entry points that write operations, so
-later input channels (AI parsing of receipts, voice, SMS) can call them after the user confirms.
+later input channels (AI parsing of receipts, SMS) can call them after the user confirms.
 """
 import uuid
 from dataclasses import dataclass, field

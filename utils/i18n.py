@@ -78,10 +78,10 @@ TEXTS = {
               "🧾 Tarix — so'nggi amallar; amalni ochib tahrirlash yoki o'chirish mumkin\n"
               "⚙️ Sozlamalar — hisoblar va til\n\n"
               "<b>🤖 AI kiritish</b>\n"
-              "Menyusiz yozish: chek rasmini, ovozli xabarni, bank SMS'ini yoki oddiy matnni yuboring "
+              "Menyusiz yozish: chek rasmini, bank SMS'ini yoki oddiy matnni yuboring "
               "(masalan «taksi 25000 uob kartadan», «kofe 18 ming naqd»). Bot qoralama ko'rsatadi — "
               "tekshiring, kerak bo'lsa tahrirlang va ✅ Saqlash ni bosing. "
-              "Rasm va ovoz tahlil uchun Google Gemini'ga yuboriladi.",
+              "Rasm va matn tahlil uchun Anthropic Claude'ga yuboriladi.",
         "ru": "<b>Команды</b>\n"
               "/start — главное меню\n"
               "/salaryday 5 — день начала финансового месяца (1–28)\n"
@@ -95,10 +95,10 @@ TEXTS = {
               "🧾 История — последние операции; откройте операцию, чтобы изменить или удалить её\n"
               "⚙️ Настройки — счета и язык\n\n"
               "<b>🤖 AI-ввод</b>\n"
-              "Без меню: отправьте фото чека, голосовое, банковское SMS или просто текст "
+              "Без меню: отправьте фото чека, банковское SMS или просто текст "
               "(например «такси 25000 uob», «кофе 18 тысяч наличными»). Бот покажет черновик — проверьте, "
               "при необходимости измените и нажмите ✅ Сохранить. "
-              "Фото и голос отправляются на анализ в Google Gemini.",
+              "Фото и текст отправляются на анализ в Anthropic Claude.",
         "en": "<b>Commands</b>\n"
               "/start — main menu\n"
               "/salaryday 5 — day your financial month starts (1–28)\n"
@@ -112,10 +112,10 @@ TEXTS = {
               "🧾 History — recent operations; open one to edit or delete it\n"
               "⚙️ Settings — accounts and language\n\n"
               "<b>🤖 AI input</b>\n"
-              "Skip the menus: send a receipt photo, a voice message, a bank SMS or plain text "
+              "Skip the menus: send a receipt photo, a bank SMS or plain text "
               "(e.g. \"taxi 25000 from uob\", \"got salary 12m to hamkorbank\"). The bot shows a draft — "
               "check it, edit if needed and press ✅ Save. "
-              "Photos and voice are sent to Google Gemini for analysis.",
+              "Photos and text are sent to Anthropic Claude for analysis.",
     },
     "use_menu": {
         "uz": "Quyidagi menyudan foydalaning.",
@@ -467,11 +467,11 @@ TEXTS = {
         "en": "🗑 Operation deleted. New balances:",
     },
 
-    # ---- AI input (receipts, voice, free text, bank SMS) ----
+    # ---- AI input (receipts, free text, bank SMS) ----
     "ai_not_configured": {
-        "uz": "🤖 AI kiritish sozlanmagan (GEMINI_API_KEY yo'q). Menyudan foydalaning.",
-        "ru": "🤖 AI-ввод не настроен (нет GEMINI_API_KEY). Воспользуйтесь меню.",
-        "en": "🤖 AI input is not configured (no GEMINI_API_KEY). Please use the menu.",
+        "uz": "🤖 AI kiritish sozlanmagan (ANTHROPIC_API_KEY yo'q). Menyudan foydalaning.",
+        "ru": "🤖 AI-ввод не настроен (нет ANTHROPIC_API_KEY). Воспользуйтесь меню.",
+        "en": "🤖 AI input is not configured (no ANTHROPIC_API_KEY). Please use the menu.",
     },
     "ai_analyzing": {"uz": "⏳ Tahlil qilinmoqda...", "ru": "⏳ Анализирую...", "en": "⏳ Analyzing..."},
     "ai_nothing_found": {
@@ -482,9 +482,19 @@ TEXTS = {
         "en": "🤖 No operation found in this message. Try again (e.g. \"taxi 25000 uob\") or use the menu.",
     },
     "ai_unsupported_file": {
-        "uz": "Bu fayl turini o'qiy olmayman. Rasm, PDF yoki ovozli xabar yuboring.",
-        "ru": "Не могу прочитать этот тип файла. Отправьте фото, PDF или голосовое сообщение.",
-        "en": "I can't read this file type. Send a photo, a PDF or a voice message.",
+        "uz": "Bu fayl turini o'qiy olmayman. Rasm yoki PDF yuboring.",
+        "ru": "Не могу прочитать этот тип файла. Отправьте фото или PDF.",
+        "en": "I can't read this file type. Send a photo or a PDF.",
+    },
+    "ai_voice_unsupported": {
+        "uz": "🎤 Ovozli xabarlar qo'llab-quvvatlanmaydi. Matn yoki chek rasmini yuboring.",
+        "ru": "🎤 Голосовые сообщения не поддерживаются. Отправьте текст или фото чека.",
+        "en": "🎤 Voice messages are not supported. Send text or a photo of the receipt.",
+    },
+    "ai_error_refused": {
+        "uz": "AI bu so'rovni bajarishdan bosh tortdi. Boshqa rasm yoki matn yuboring.",
+        "ru": "AI отказался обрабатывать этот запрос. Отправьте другое фото или текст.",
+        "en": "The AI declined to process this request. Try a different photo or text.",
     },
     "ai_error_timeout": {
         "uz": "⌛ AI vaqtida javob bermadi. Birozdan so'ng qayta urinib ko'ring.",
@@ -497,9 +507,9 @@ TEXTS = {
         "en": "🚦 The AI request quota is exhausted. Try later or use the menu.",
     },
     "ai_error_auth": {
-        "uz": "🔑 GEMINI_API_KEY noto'g'ri yoki unga ruxsat yo'q.",
-        "ru": "🔑 GEMINI_API_KEY неверный или не имеет доступа.",
-        "en": "🔑 GEMINI_API_KEY is invalid or has no access.",
+        "uz": "🔑 ANTHROPIC_API_KEY noto'g'ri yoki unga ruxsat yo'q.",
+        "ru": "🔑 ANTHROPIC_API_KEY неверный или не имеет доступа.",
+        "en": "🔑 ANTHROPIC_API_KEY is invalid or has no access.",
     },
     "ai_error_bad_input": {
         "uz": "AI bu faylni o'qiy olmadi. Boshqa rasm yuboring yoki matn bilan yozing.",
@@ -517,8 +527,8 @@ TEXTS = {
         "en": "The AI returned an unreadable answer. Please try again.",
     },
     "ai_error_too_large": {
-        "uz": "Fayl juda katta (15 MB gacha).", "ru": "Файл слишком большой (до 15 МБ).",
-        "en": "The file is too large (up to 15 MB).",
+        "uz": "Fayl juda katta (rasm 5 MB gacha, PDF 15 MB gacha).", "ru": "Файл слишком большой (фото до 5 МБ, PDF до 15 МБ).",
+        "en": "The file is too large (images up to 5 MB, PDFs up to 15 MB).",
     },
     "ai_draft_title": {
         "uz": "🤖 <b>Qoralama {index}/{total}</b> · {kind}", "ru": "🤖 <b>Черновик {index}/{total}</b> · {kind}",

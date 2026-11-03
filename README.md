@@ -36,20 +36,19 @@ A private personal-finance bot for a single owner, built on this template.
 - 🧾 History: open a recent operation to change its amount, category or account, or delete it
   (balances are recalculated; deleting a transfer removes both legs)
 - 📊 Report for the current financial month (it starts on the salary day, `/salaryday 5`)
-- 🤖 AI input: record operations without menus from a receipt photo, a voice message, a forwarded bank SMS
+- 🤖 AI input: record operations without menus from a receipt photo, a forwarded bank SMS
   or free text (see below)
 
 All texts live in `utils/i18n.py`; operations are written through `record_operation` / `record_transfer`
 in `utils/db_api/operations.py`.
 
-### AI input (Google Gemini)
+### AI input (Anthropic Claude)
 
 Send the bot any of these instead of using the menu:
 
-- a **receipt photo** (or an image / PDF sent as a file); the total paid is used, not the individual lines
+- a **receipt photo** (or an image / PDF sent as a file; JPEG, PNG, GIF, WebP, up to 5 MB, PDF up to 15 MB); the total paid is used, not the individual lines
 - **free text** in Uzbek, Russian or English: `taksi 25000 uob kartadan`, `кофе 18 тысяч наличными`,
   `got salary 12m to hamkorbank`; several operations in one message are fine
-- a **voice message**
 - a **forwarded / pasted bank SMS** or notification (Uzcard, Humo, Visa; debit and credit)
 
 The bot shows a draft card (amount, type, category, account, date, note). Nothing is saved until you press
@@ -58,20 +57,21 @@ required fields (e.g. the account) must be filled in first. Several drafts from 
 by one (⏭ Skip) or with ✅ Save all. The card warns when an almost identical operation already exists (same
 amount and account within 10 minutes, or the same SMS / photo sent again). Saved rows have `source = "ai"`.
 
-How it works: `utils/ai/gemini.py` sends the input (image/audio bytes inline, no separate OCR or speech-to-text)
-plus a list of your accounts and categories to Gemini and asks for JSON with a fixed response schema.
+Voice messages are not supported (Claude has no audio input); the bot replies that you should send text or a photo.
+
+How it works: `utils/ai/claude.py` sends the input (image/PDF bytes inline, no separate OCR) plus a list of
+your accounts and categories to the Claude API (`claude-haiku-5-5` by default) and asks for JSON that follows
+a fixed schema (structured outputs, `output_config.format`).
 `utils/ai/parser.py` never trusts the answer: amounts are re-parsed (`125 000,00`, `125.000`, `18 ming`, `12m`),
 the currency must be UZS/USD, the account must be yours and in that currency, the category must exist;
 anything doubtful is left empty for you to choose. Card digits from an SMS (`*1234`) match an account whose
 **name contains those 4 digits**, e.g. rename the account to `UOB 1234`.
 
 While you are inside a menu step (e.g. typing an amount), text goes to that step, not to the AI.
-Without `GEMINI_API_KEY` the bot works as before and answers that AI input is not configured.
+Without `ANTHROPIC_API_KEY` the bot works as before and answers that AI input is not configured.
 
-> **Privacy:** receipts, voice messages and texts you send for AI input, together with the names of your
-> accounts and categories, are sent to Google (Gemini API via Google AI Studio) for processing. On the free
-> tier Google may use this data to improve its products; use a paid (Cloud billing) key if that matters.
-> Balances and history are not sent.
+> **Privacy:** receipts and texts you send for AI input, together with the names of your accounts and
+> categories, are sent to Anthropic (Claude API) for processing. Balances and history are not sent.
 
 ### Environment variables (`.env`)
 
@@ -81,9 +81,10 @@ Without `GEMINI_API_KEY` the bot works as before and answers that AI input is no
 | `ADMINS`       | Comma-separated Telegram user IDs allowed to use the bot                 |
 | `ip`           | Host IP address (used for deployment / webhooks)                         |
 | `DATABASE_URL` | SQLAlchemy async URL, default `sqlite+aiosqlite:///./finora.db`          |
-| `GEMINI_API_KEY` | Google AI Studio key ([aistudio.google.com/apikey](https://aistudio.google.com/apikey)); empty = AI input off |
-| `GEMINI_MODEL` | Gemini model, default `gemini-3.6-flash` (any multimodal model with structured output) |
-| `GEMINI_TIMEOUT` | Seconds to wait for Gemini, default `60`                               |
+| `ANTHROPIC_API_KEY` | Anthropic API key ([console.anthropic.com](https://console.anthropic.com/settings/keys)); empty = AI input off |
+| `CLAUDE_EXTRACT_MODEL` | Model for receipts, SMS and free text, default `claude-haiku-5-5` |
+| `CLAUDE_ANALYSIS_MODEL` | Model reserved for Q&A / advice (later phase), default `claude-opus-5-5` |
+| `CLAUDE_TIMEOUT` | Seconds to wait for Claude, default `60`                               |
 
 `.env` is gitignored, so your secrets are never committed. Copy `.env.example` to start.
 
@@ -119,7 +120,7 @@ pytest
 ```
 
 The tests use a temporary SQLite database and never touch `.env` values or your real database.
-Gemini is mocked, so no API key is needed and no requests are sent.
+The Claude client is mocked, so no API key is needed and no requests are sent.
 
 ## Project structure
 
@@ -141,9 +142,9 @@ Gemini is mocked, so no API key is needed and no requests are sent.
 ├── states/                # FSM states
 ├── filters/               # custom filters
 ├── migrations/            # alembic migrations
-├── tests/                 # pytest suite (service layer, AI parsing with a mocked Gemini)
+├── tests/                 # pytest suite (service layer, AI parsing with a mocked Claude client)
 └── utils/
-    ├── ai/                # Gemini client + prompt/schema (gemini.py), validation (parser.py)
+    ├── ai/                # Claude client + prompt/schema (claude.py), validation (parser.py)
     ├── db_api/            # database helpers
     ├── misc/              # logging, throttling decorator
     ├── notify_admins.py   # start-up notification

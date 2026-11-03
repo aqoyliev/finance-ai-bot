@@ -1,11 +1,11 @@
-"""AI input: validation of canned Gemini answers, duplicate guard and the client wrapper (no real API calls)."""
+"""AI input: validation of canned Claude answers, duplicate guard and the client wrapper (no real API calls)."""
 import json
 from datetime import datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
 
-from utils.ai import gemini, parser
+from utils.ai import claude, parser
 from utils.ai.parser import AccountRef, UserContext
 from utils.db_api import finance as db
 
@@ -214,71 +214,156 @@ async def test_load_context_from_db():
     assert any(a.name == "Visa" and a.kind == "credit" for a in ctx.accounts)
     assert "Transport" in ctx.categories["expense"] and "Taxi" in ctx.categories["expense"]["Transport"]
     assert "Salary" in ctx.categories["income"]
-    text = gemini.build_context(*ctx.as_prompt_data(), "2026-11-04 15:00")
+    text = claude.build_context(*ctx.as_prompt_data(), "2026-11-04 15:00")
     assert "| Visa | credit | UZS" in text and "Transport: Fuel, Taxi" in text
 
 
-# ---- Gemini client wrapper (mocked SDK) ----
+# ---- Claude client wrapper (mocked SDK) ----
 
-class FakeModels:
+class FakeMessages:
     def __init__(self, result):
         self.result = result
         self.calls = []
 
-    async def generate_content(self, **kwargs):
+    async def create(self, **kwargs):
         self.calls.append(kwargs)
         if isinstance(self.result, Exception):
             raise self.result
-        return SimpleNamespace(text=self.result)
+        return self.result
+
+
+def reply(text, stop_reason="end_turn", blocks=None):
+    content = blocks if blocks is not None else [SimpleNamespace(type="text", text=text)]
+    return SimpleNamespace(stop_reason=stop_reason, content=content)
 
 
 def fake_client(result):
-    models = FakeModels(result)
-    return gemini.GeminiClient("", "test-model", client=SimpleNamespace(aio=SimpleNamespace(models=models))), models
+    messages = FakeMessages(result)
+    client = claude.ClaudeClient("", "haiku-x", "opus-x", client=SimpleNamespace(messages=messages))
+    return client, messages
 
 
-async def test_extract_operations_sends_schema_and_media():
+def status_error(cls, status):
+    import httpx2 as httpx
+    request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+    return cls("boom", response=httpx.Response(status, request=request), body=None)
+
+
+async def test_extract_operations_request_shape():
     answer = {"input_type": "receipt", "operations": [{"kind": "expense", "amount": "1000", "confidence": 1}]}
-    client, models = fake_client(json.dumps(answer))
-    result = await gemini.extract_operations("CTX", None, [gemini.Media(b"jpg", "image/jpeg")], client=client)
+    client, messages = fake_client(reply(json.dumps(answer)))
+    media = [claude.Media(b"jpg", "image/jpeg"), claude.Media(b"%PDF", "application/pdf")]
+    result = await claude.extract_operations("CTX", None, media, client=client)
     assert result == answer
-    call = models.calls[0]
-    assert call["model"] == "test-model"
-    assert call["config"].response_mime_type == "application/json" and call["config"].response_schema is not None
-    parts = call["contents"][0].parts
-    assert parts[0].inline_data.mime_type == "image/jpeg" and parts[0].inline_data.data == b"jpg"
-    assert parts[1].text == "CTX"
+    call = messages.calls[0]
+    assert call["model"] == "haiku-x" and call["max_tokens"] == 4000
+    assert call["system"] == claude.EXTRACTION_SYSTEM
+    for banned in ("temperature", "top_p", "top_k", "thinking", "output_format"):
+        assert banned not in call
+    config = call["output_config"]
+    assert config["effort"] == "low"
+    assert config["format"]["type"] == "json_schema" and config["format"]["schema"]["additionalProperties"] is False
+    [message] = call["messages"]
+    assert message["role"] == "user"
+    image, document, context, instruction = message["content"]  # media first, then text
+    assert image == {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": "anBn"}}
+    assert document["type"] == "document" and document["source"]["media_type"] == "application/pdf"
+    assert context == {"type": "text", "text": "CTX"}
+    assert instruction["text"] == "Extract the operations from the attached file."
+
+
+async def test_per_call_model_and_text_only_request():
+    client, messages = fake_client(reply("hello"))
+    assert await client.generate(["q"], model=client.analysis_model) == "hello"
+    call = messages.calls[0]
+    assert call["model"] == "opus-x" and "output_config" not in call and "system" not in call
+
+
+def test_schema_is_structured_output_compatible():
+    schema = claude._schema()
+    operation = schema["properties"]["operations"]["items"]
+    assert operation["additionalProperties"] is False
+    assert operation["required"] == list(operation["properties"])
+    assert "voice" not in schema["properties"]["input_type"]["enum"]
+    assert {"type": "null"} in operation["properties"]["account_id"]["anyOf"]
+    text = json.dumps(schema)
+    assert "nullable" not in text and "minimum" not in text and "maximum" not in text
+
+
+def test_request_is_accepted_by_the_sdk_types():
+    """Send the built request through the real SDK with a fake transport (no network)."""
+    import anthropic
+    import httpx2 as httpx
+
+    seen = {}
+
+    def handler(request):
+        seen["body"] = json.loads(request.content)
+        return httpx.Response(200, json={
+            "id": "msg_1", "type": "message", "role": "assistant", "model": "haiku-x", "stop_reason": "end_turn",
+            "stop_sequence": None, "content": [{"type": "text", "text": "{}"}],
+            "usage": {"input_tokens": 1, "output_tokens": 1}})
+
+    sdk = anthropic.Anthropic(api_key="test", http_client=httpx.Client(transport=httpx.MockTransport(handler)))
+    client = claude.ClaudeClient("test", "haiku-x")
+    request = client.build_request(["CTX"], [claude.Media(b"jpg", "image/jpeg")], system="S",
+                                   schema=claude._schema(), effort="low")
+    response = sdk.messages.create(**request)
+    assert response.stop_reason == "end_turn"
+    assert seen["body"]["output_config"]["effort"] == "low"
+    assert seen["body"]["messages"][0]["content"][0]["type"] == "image"
+
+
+async def test_not_configured_and_oversized_media():
+    assert claude.ClaudeClient("", "m").configured is False
+    with pytest.raises(claude.AIError) as err:
+        await claude.extract_operations("CTX", "hi", client=claude.ClaudeClient("", "m"))
+    assert err.value.code == "not_configured"
+
+    client, _ = fake_client(reply("{}"))
+    too_big = [claude.Media(b"0" * (claude.MAX_IMAGE_BYTES + 1), "image/png")]
+    with pytest.raises(claude.AIError) as err:
+        await claude.extract_operations("CTX", "x", too_big, client=client)
+    assert err.value.code == "too_large"
+    with pytest.raises(claude.AIError) as err:  # audio / HEIC are not supported by Claude
+        await claude.extract_operations("CTX", "x", [claude.Media(b"0", "audio/ogg")], client=client)
+    assert err.value.code == "bad_input"
+    assert claude.media_limit("application/pdf") == claude.MAX_MEDIA_BYTES
+
+
+async def test_response_problems_are_mapped():
+    cases = [(reply("", stop_reason="refusal"), "refused"),
+             (reply('{"operations": ', stop_reason="max_tokens"), "bad_response"),
+             (reply("not json"), "bad_response"),
+             (reply("", blocks=[]), "bad_response")]
+    for response, code in cases:
+        client, _ = fake_client(response)
+        with pytest.raises(claude.AIError) as err:
+            await claude.extract_operations("CTX", "hi", client=client)
+        assert err.value.code == code, code
+
+    # thinking blocks are skipped, only text counts
+    blocks = [SimpleNamespace(type="thinking", thinking="hmm"), SimpleNamespace(type="text", text='{"a": 1}')]
+    client, _ = fake_client(reply("", blocks=blocks))
+    assert await client.generate_json(["x"], schema={}) == {"a": 1}
 
 
 async def test_client_errors_are_mapped():
-    from google.genai import errors
+    import anthropic
 
-    assert gemini.GeminiClient("", "m").configured is False
-    with pytest.raises(gemini.AIError) as err:
-        await gemini.extract_operations("CTX", "hi", client=gemini.GeminiClient("", "m"))
-    assert err.value.code == "not_configured"
-
-    for exc, code in [(errors.ClientError(429, {"error": {"message": "quota"}}), "quota"),
-                      (errors.ClientError(403, {"error": {"message": "denied"}}), "auth"),
-                      (errors.ServerError(503, {"error": {"message": "overloaded"}}), "unavailable"),
-                      (RuntimeError("boom"), "unavailable")]:
+    cases = [(status_error(anthropic.AuthenticationError, 401), "auth"),
+             (status_error(anthropic.PermissionDeniedError, 403), "auth"),
+             (status_error(anthropic.RateLimitError, 429), "quota"),
+             (status_error(anthropic.BadRequestError, 400), "bad_input"),
+             (status_error(anthropic.RequestTooLargeError, 413), "too_large"),
+             (status_error(anthropic.InternalServerError, 500), "unavailable"),
+             (status_error(anthropic.OverloadedError, 529), "unavailable"),
+             (status_error(anthropic.NotFoundError, 404), "unavailable"),
+             (anthropic.APITimeoutError(request=None), "timeout"),
+             (anthropic.APIConnectionError(message="down", request=None), "unavailable"),
+             (RuntimeError("boom"), "unavailable")]
+    for exc, code in cases:
         client, _ = fake_client(exc)
-        with pytest.raises(gemini.AIError) as err:
-            await gemini.extract_operations("CTX", "hi", client=client)
-        assert err.value.code == code
-
-    client, _ = fake_client("not json")
-    with pytest.raises(gemini.AIError) as err:
-        await gemini.extract_operations("CTX", "hi", client=client)
-    assert err.value.code == "bad_response"
-
-    client, _ = fake_client(None)
-    with pytest.raises(gemini.AIError) as err:
-        await gemini.extract_operations("CTX", "hi", client=client)
-    assert err.value.code == "bad_response"
-
-    client, _ = fake_client("{}")
-    with pytest.raises(gemini.AIError) as err:
-        await gemini.extract_operations("CTX", "x", [gemini.Media(b"0" * (gemini.MAX_MEDIA_BYTES + 1), "audio/ogg")],
-                                        client=client)
-    assert err.value.code == "too_large"
+        with pytest.raises(claude.AIError) as err:
+            await claude.extract_operations("CTX", "hi", client=client)
+        assert err.value.code == code, (type(exc).__name__, code)

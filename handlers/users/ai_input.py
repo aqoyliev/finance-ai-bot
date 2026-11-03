@@ -1,4 +1,4 @@
-"""AI input: receipt photos, voice messages, bank SMS and free text -> draft operations -> confirm -> save.
+"""AI input: receipt photos, bank SMS and free text -> draft operations -> confirm -> save.
 
 Drafts live in FSM data ("ai_drafts", the current one first) while the state is AIDraft.*.
 Manual flows are unaffected: their FSM states are handled by their own handlers, and this module only
@@ -17,7 +17,7 @@ from keyboards.inline import ai as ai_kb
 from keyboards.inline import finance as kb
 from loader import bot, dp
 from states.finance import AIDraft
-from utils.ai import gemini, parser
+from utils.ai import claude, parser
 from utils.ai.parser import Draft
 from utils.db_api import finance as db
 from utils.i18n import TEXTS, t
@@ -28,7 +28,7 @@ from .finance import Choice
 
 log = logging.getLogger(__name__)
 
-DOCUMENT_TYPES = ("image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "application/pdf")
+DOCUMENT_TYPES = claude.IMAGE_TYPES + (claude.PDF_TYPE,)  # what Claude can read (no HEIC)
 INPUT_STATES = [None, AIDraft.review]  # states in which a new input starts an analysis
 
 
@@ -145,8 +145,8 @@ async def lost(call: types.CallbackQuery, state: FSMContext, lang: str):
 # ---- Input: analysis ----
 
 async def analyze(message: types.Message, state: FSMContext, lang: str, text: Optional[str] = None,
-                  media: Optional[gemini.Media] = None, source_ref: Optional[str] = None):
-    client = gemini.get_client()
+                  media: Optional[claude.Media] = None, source_ref: Optional[str] = None):
+    client = claude.get_client()
     if not client.configured:
         await message.answer(t("ai_not_configured", lang), reply_markup=kb.main_menu(lang))
         return
@@ -156,10 +156,10 @@ async def analyze(message: types.Message, state: FSMContext, lang: str, text: Op
     try:
         ctx = await parser.load_context(user_id)
         accounts, categories = ctx.as_prompt_data()
-        context = gemini.build_context(accounts, categories, now.strftime("%Y-%m-%d %H:%M (%A)"))
+        context = claude.build_context(accounts, categories, now.strftime("%Y-%m-%d %H:%M (%A)"))
         async with typing(message.chat.id):
-            raw = await gemini.extract_operations(context, text, [media] if media else [], client=client)
-    except gemini.AIError as err:
+            raw = await claude.extract_operations(context, text, [media] if media else [], client=client)
+    except claude.AIError as err:
         log.info("AI input failed: %s", err)
         await status.edit_text(error_text(err.code, lang), reply_markup=kb.main_menu(lang))
         return
@@ -198,20 +198,19 @@ async def document_input(message: types.Message, state: FSMContext, lang: str):
                        size=document.file_size)
 
 
-@dp.message_handler(state=INPUT_STATES, content_types=[types.ContentType.VOICE,
-                                                     types.ContentType.AUDIO])
+@dp.message_handler(state=INPUT_STATES, content_types=[types.ContentType.VOICE, types.ContentType.AUDIO,
+                                                     types.ContentType.VIDEO_NOTE])
 async def voice_input(message: types.Message, state: FSMContext, lang: str):
-    audio = message.voice or message.audio
-    mime = (audio.mime_type or "audio/ogg").lower()
-    await analyze_file(message, state, lang, audio.file_id, audio.file_unique_id, mime, size=audio.file_size)
+    # Claude has no audio input
+    await message.answer(t("ai_voice_unsupported", lang))
 
 
 async def analyze_file(message: types.Message, state: FSMContext, lang: str, file_id: str, unique_id: str,
                        mime: str, size: Optional[int] = None):
-    if not gemini.get_client().configured:
+    if not claude.get_client().configured:
         await message.answer(t("ai_not_configured", lang), reply_markup=kb.main_menu(lang))
         return
-    if size and size > gemini.MAX_MEDIA_BYTES:
+    if size and size > claude.media_limit(mime):
         await message.answer(error_text("too_large", lang))
         return
     try:
@@ -221,7 +220,7 @@ async def analyze_file(message: types.Message, state: FSMContext, lang: str, fil
         await message.answer(error_text("unavailable", lang))
         return
     # A caption ("taxi, uob card") is passed along as a hint
-    await analyze(message, state, lang, text=message.caption, media=gemini.Media(data, mime),
+    await analyze(message, state, lang, text=message.caption, media=claude.Media(data, mime),
                   source_ref=parser.fingerprint(f"file:{unique_id}"))
 
 

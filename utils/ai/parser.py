@@ -1,4 +1,4 @@
-"""Validation of Gemini output and mapping onto the user's own accounts and categories.
+"""Validation of Claude output and mapping onto the user's own accounts and categories.
 
 The model's answer is never trusted: amounts are re-parsed, currencies checked, accounts must belong to
 the user (and match the currency), categories must exist. Anything doubtful is left empty (None) so the
@@ -254,7 +254,7 @@ def validate_operation(item: Any, ctx: UserContext, now: datetime) -> Optional[D
 
 
 def parse_response(raw: Any, ctx: UserContext, now: datetime, source_ref: Optional[str] = None) -> List[Draft]:
-    """Gemini JSON -> validated drafts (at most MAX_DRAFTS). Empty list = nothing recognized."""
+    """Claude JSON -> validated drafts (at most MAX_DRAFTS). Empty list = nothing recognized."""
     items = raw.get("operations") if isinstance(raw, dict) else None
     if not isinstance(items, list):
         return []
