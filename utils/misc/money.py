@@ -9,12 +9,12 @@ def money_text(minor: int, currency: str) -> str:
     return f"{amount:,.2f} {currency}".replace(",", " ")
 
 
-def parse_amount(text: str) -> Optional[int]:
+def parse_amount(text: str, allow_zero: bool = False) -> Optional[int]:
     """Parse user input like '12 500,50' into minor units. Returns None if invalid."""
     try:
-        value = Decimal(text.replace(" ", "").replace(",", "."))
+        value = Decimal((text or "").replace(" ", "").replace(",", "."))
     except InvalidOperation:
         return None
-    if not value.is_finite() or value <= 0 or value > MAX_AMOUNT:
+    if not value.is_finite() or value < 0 or value > MAX_AMOUNT or (value == 0 and not allow_zero):
         return None
     return int(value * 100)

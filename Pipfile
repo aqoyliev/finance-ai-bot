@@ -16,6 +16,8 @@ fastapi = "~=0.111"
 uvicorn = {extras = ["standard"], version = "~=0.29"}
 
 [dev-packages]
+pytest = "~=9.0"
+pytest-asyncio = "~=1.0"
 
 [requires]
 python_version = "3.11"

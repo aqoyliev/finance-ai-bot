@@ -14,8 +14,11 @@ class User(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)  # Telegram user id
     username: Mapped[str] = mapped_column(String, default="")
+    language: Mapped[Optional[str]] = mapped_column(String(2))  # uz | ru | en; None until chosen
     salary_day: Mapped[int] = mapped_column(Integer, default=1)
     base_currency: Mapped[str] = mapped_column(String(3), default="UZS")
+    # True once default accounts/categories were created (in the chosen language)
+    is_seeded: Mapped[bool] = mapped_column(default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime)
 
 
@@ -29,8 +32,11 @@ class Account(Base):
     currency: Mapped[str] = mapped_column(String(3), default="UZS")
     # For credit accounts the balance is a negative liability (debt = -balance)
     balance_minor: Mapped[int] = mapped_column(BigInteger, default=0)
+    # Balance the account was opened with; balance = opening + sum of operation effects
+    opening_balance_minor: Mapped[int] = mapped_column(BigInteger, default=0)
     credit_limit_minor: Mapped[int] = mapped_column(BigInteger, default=0)
-    is_active: Mapped[bool] = mapped_column(default=True)
+    is_active: Mapped[bool] = mapped_column(default=True)  # False = deactivated (soft-deleted)
+    created_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
 
 
 class Category(Base):
@@ -56,15 +62,18 @@ class Transaction(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
-    # One purchase paid from several accounts shares a single group_id
+    # Rows of one operation share a group_id: parts of a split purchase or both legs of a transfer
     group_id: Mapped[str] = mapped_column(String, index=True)
-    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"))
-    kind: Mapped[str] = mapped_column(String)  # expense | income
-    amount_minor: Mapped[int] = mapped_column(BigInteger)
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), index=True)
+    kind: Mapped[str] = mapped_column(String)  # expense | income | transfer
+    # Effect on the account balance: "in" adds the amount, "out" subtracts it
+    direction: Mapped[str] = mapped_column(String(3))
+    amount_minor: Mapped[int] = mapped_column(BigInteger)  # always positive
     currency: Mapped[str] = mapped_column(String(3))
     category: Mapped[Optional[str]] = mapped_column(String)
     subcategory: Mapped[Optional[str]] = mapped_column(String)
     note: Mapped[Optional[str]] = mapped_column(String)
+    source: Mapped[str] = mapped_column(String, default="manual")  # manual | ai (later phases)
     occurred_at: Mapped[datetime] = mapped_column(DateTime, index=True)
 
 

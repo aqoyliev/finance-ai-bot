@@ -1,17 +1,39 @@
 from aiogram import types
 from aiogram.dispatcher import FSMContext
+from aiogram.dispatcher.filters import Text
 from aiogram.dispatcher.filters.builtin import CommandStart
 
 from keyboards.inline import finance as kb
 from loader import dp
 from utils.db_api import finance as db
+from utils.i18n import LANGUAGES, t
 
 
 @dp.message_handler(CommandStart(), state="*")
-async def bot_start(message: types.Message, state: FSMContext):
+async def bot_start(message: types.Message, state: FSMContext, lang: str):
     await state.finish()
-    await db.ensure_user(message.from_user.id, message.from_user.username)
-    await message.answer(
-        "FINANCE BOT\n\nChoose an action. Set your salary day: /salaryday 5\n"
-        "Set the USD rate: /rate 1 USD 12700 UZS",
-        reply_markup=kb.main_menu())
+    if await db.get_language(message.from_user.id) is None:
+        # First contact: the language decides how starter accounts and categories are named
+        await message.answer(t("choose_language", lang), reply_markup=kb.languages())
+        return
+    await message.answer(t("start", lang), reply_markup=kb.main_menu(lang))
+
+
+@dp.callback_query_handler(Text(startswith="lang:"), state="*")
+async def choose_language(call: types.CallbackQuery, state: FSMContext):
+    lang = call.data.split(":")[1]
+    if lang not in LANGUAGES:
+        await call.answer()
+        return
+    seeded = await db.set_language(call.from_user.id, call.from_user.username, lang)
+    await call.answer()
+    await state.finish()
+    await call.message.edit_text(t("start" if seeded else "language_changed", lang),
+                                 reply_markup=kb.main_menu(lang))
+
+
+@dp.callback_query_handler(Text(equals="menu:main"), state="*")
+async def show_main_menu(call: types.CallbackQuery, state: FSMContext, lang: str):
+    await call.answer()
+    await state.finish()
+    await call.message.edit_text(t("main_menu", lang), reply_markup=kb.main_menu(lang))

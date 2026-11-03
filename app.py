@@ -8,10 +8,10 @@ from utils.set_bot_commands import set_default_commands
 
 
 async def on_startup(dispatcher):
-    # Create database tables if they do not exist yet
+    # Apply database migrations (alembic upgrade head)
     await init_db()
 
-    # Default commands (/start and /help)
+    # Bot commands in every supported language
     await set_default_commands(dispatcher)
 
     # Notify admin that the bot has started

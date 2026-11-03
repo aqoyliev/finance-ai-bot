@@ -1,0 +1,52 @@
+from decimal import Decimal, InvalidOperation
+
+from aiogram import types
+from aiogram.dispatcher import FSMContext
+from aiogram.dispatcher.filters import Command, Text
+
+from keyboards.inline import finance as kb
+from loader import dp
+from utils.db_api import finance as db
+from utils.i18n import t
+
+
+@dp.message_handler(Command("salaryday"), state="*")
+async def salaryday(message: types.Message, lang: str):
+    arg = message.get_args().strip()
+    if not arg.isdigit() or not 1 <= int(arg) <= 28:
+        await message.answer(t("salaryday_usage", lang))
+        return
+    await db.set_salary_day(message.from_user.id, int(arg))
+    await message.answer(t("salaryday_saved", lang, day=int(arg)))
+
+
+@dp.message_handler(Command("rate"), state="*")
+async def rate_command(message: types.Message, lang: str):
+    args = message.get_args().split()
+    if len(args) != 4 or args[1].upper() != "USD" or args[3].upper() != "UZS":
+        await message.answer(t("rate_usage", lang))
+        return
+    try:
+        rate = Decimal(args[2].replace(",", "."))
+        if not rate.is_finite() or rate <= 0:
+            raise ValueError
+    except (InvalidOperation, ValueError):
+        await message.answer(t("rate_invalid", lang))
+        return
+    await db.set_usd_rate(message.from_user.id, rate)
+    await message.answer(t("rate_saved", lang, rate=rate))
+
+
+@dp.callback_query_handler(Text(equals="menu:settings"), state="*")
+async def show_settings(call: types.CallbackQuery, state: FSMContext, lang: str):
+    await call.answer()
+    await state.finish()
+    user = await db.get_user(call.from_user.id)
+    await call.message.edit_text(t("settings", lang, salary_day=user.salary_day),
+                                 reply_markup=kb.settings(lang))
+
+
+@dp.callback_query_handler(Text(equals="set:lang"), state="*")
+async def change_language(call: types.CallbackQuery, lang: str):
+    await call.answer()
+    await call.message.edit_text(t("choose_language", lang), reply_markup=kb.languages())
