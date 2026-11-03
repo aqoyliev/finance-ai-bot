@@ -45,3 +45,32 @@ def kinds(lang: str) -> InlineKeyboardMarkup:
 
 def back_only(lang: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[[back_to_draft(lang)]])
+
+
+# ---- Ask AI and advice ----
+
+def ask_answer(lang: str) -> InlineKeyboardMarkup:
+    """Under the Ask AI prompt and every answer."""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [_button("btn_advice_now", "ask:advice", lang), _button("btn_menu", "menu:main", lang)],
+    ])
+
+
+def after_advice(lang: str, settings: bool = False) -> InlineKeyboardMarkup:
+    row = [_button("btn_ask_ai", "menu:ask", lang)]
+    if settings:
+        row.append(_button("btn_ai_advice", "set:advice", lang))
+    return InlineKeyboardMarkup(inline_keyboard=[row, [_button("btn_menu", "menu:main", lang)]])
+
+
+def advice_settings(user, lang: str) -> InlineKeyboardMarkup:
+    def toggle(kind: str, on: bool) -> InlineKeyboardButton:
+        mark = "✅" if on else "⬜"
+        return InlineKeyboardButton(f"{mark} {t(f'btn_advice_{kind}', lang)}", callback_data=f"adv:toggle:{kind}")
+
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [toggle("weekly", user.advice_weekly)],
+        [toggle("monthly", user.advice_monthly)],
+        [_button("btn_advice_now", "ask:advice", lang)],
+        [_button("btn_back", "menu:settings", lang)],
+    ])

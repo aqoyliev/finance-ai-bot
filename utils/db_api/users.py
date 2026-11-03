@@ -1,10 +1,12 @@
+from datetime import date
 from decimal import Decimal
-from typing import Optional
+from typing import List, Optional
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .base import session_factory
-from .common import now
+from .common import InvalidValue, now
 from .defaults import DEFAULT_ACCOUNTS, DEFAULT_CATEGORIES, INCOME_CATEGORIES
 from .models import Account, Category, ExchangeRate, Subcategory, User
 
@@ -66,3 +68,33 @@ async def set_usd_rate(user_id: int, rate: Decimal) -> None:
             else:
                 row.rate = str(value)
                 row.updated_at = updated_at
+
+
+# ---- Automatic AI advice ----
+
+ADVICE_KINDS = ("weekly", "monthly")
+
+
+async def list_users() -> List[User]:
+    """Users who finished the first /start (language chosen)."""
+    async with session_factory() as session:
+        return list(await session.scalars(select(User).where(User.language.is_not(None)).order_by(User.id)))
+
+
+async def toggle_advice(user_id: int, kind: str) -> User:
+    """Switch weekly / monthly advice on or off; returns the updated user."""
+    if kind not in ADVICE_KINDS:
+        raise InvalidValue()
+    async with session_factory() as session, session.begin():
+        user = await session.get(User, user_id)
+        setattr(user, f"advice_{kind}", not getattr(user, f"advice_{kind}"))
+        return user
+
+
+async def mark_advice_sent(user_id: int, kind: str, day: date) -> None:
+    """Remember that the weekly (day = that Monday) or monthly (day = period start) advice was handled."""
+    if kind not in ADVICE_KINDS:
+        raise InvalidValue()
+    async with session_factory() as session, session.begin():
+        user = await session.get(User, user_id)
+        setattr(user, f"advice_{kind}_sent", day)

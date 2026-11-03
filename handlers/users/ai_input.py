@@ -3,9 +3,10 @@
 Drafts live in FSM data ("ai_drafts", the current one first) while the state is AIDraft.*.
 Manual flows are unaffected: their FSM states are handled by their own handlers, and this module only
 reacts to plain text when no state (or AIDraft.review) is set. It is registered before handlers/users/echo.
+
+The extraction model also classifies free text: a question about the user's finances is handed to Ask AI
+(handlers/users/ask_ai.py) instead of becoming a draft. Photos and files always go to extraction.
 """
-import asyncio
-import contextlib
 import logging
 from typing import List, Optional
 
@@ -16,47 +17,29 @@ from aiogram.dispatcher.filters import Text
 from keyboards.inline import ai as ai_kb
 from keyboards.inline import finance as kb
 from loader import bot, dp
-from states.finance import AIDraft
+from states.finance import AIDraft, AskAI
 from utils.ai import claude, parser
 from utils.ai.parser import Draft
 from utils.db_api import finance as db
-from utils.i18n import TEXTS, t
+from utils.i18n import t
 from utils.misc.money import money_text, parse_amount
 from utils.misc.texts import balance_line, over_limit_warning
 from utils.notify_alerts import send_alerts
 
+from . import ask_ai
+from .ai_common import error_text, typing  # noqa: F401  (typing is used here and patched in checks)
 from .finance import Choice
 
 log = logging.getLogger(__name__)
 
 DOCUMENT_TYPES = claude.IMAGE_TYPES + (claude.PDF_TYPE,)  # what Claude can read (no HEIC)
 INPUT_STATES = [None, AIDraft.review]  # states in which a new input starts an analysis
+MEDIA_STATES = INPUT_STATES + [AskAI.question]  # a receipt sent in Ask AI mode is still recorded
 
 
 async def download_file(file_id: str) -> bytes:
     """Telegram file -> bytes (replaced in end-to-end checks)."""
     return (await bot.download_file_by_id(file_id)).getvalue()
-
-
-def error_text(code: str, lang: str) -> str:
-    key = "ai_not_configured" if code == "not_configured" else f"ai_error_{code}"
-    return t(key if key in TEXTS else "ai_error_unavailable", lang)
-
-
-@contextlib.asynccontextmanager
-async def typing(chat_id: int):
-    """Keep the 'typing…' chat action alive while the AI works (Telegram shows it for ~5 s)."""
-    async def loop():
-        while True:
-            with contextlib.suppress(Exception):
-                await bot.send_chat_action(chat_id, types.ChatActions.TYPING)
-            await asyncio.sleep(4)
-
-    task = asyncio.create_task(loop())
-    try:
-        yield
-    finally:
-        task.cancel()
 
 
 # ---- Drafts in FSM data ----
@@ -157,7 +140,8 @@ async def analyze(message: types.Message, state: FSMContext, lang: str, text: Op
     try:
         ctx = await parser.load_context(user_id)
         accounts, categories = ctx.as_prompt_data()
-        context = claude.build_context(accounts, categories, now.strftime("%Y-%m-%d %H:%M (%A)"))
+        context = claude.build_context(accounts, categories, now.strftime("%Y-%m-%d %H:%M (%A)"),
+                                       conversation=await ask_ai.has_conversation(state))
         async with typing(message.chat.id):
             raw = await claude.extract_operations(context, text, [media] if media else [], client=client)
     except claude.AIError as err:
@@ -165,6 +149,9 @@ async def analyze(message: types.Message, state: FSMContext, lang: str, text: Op
         await status.edit_text(error_text(err.code, lang), reply_markup=kb.main_menu(lang))
         return
 
+    if text and not media and parser.intent(raw) == "question":
+        await ask_ai.answer(message, state, lang, text, status=status)
+        return
     drafts = parser.parse_response(raw, ctx, now, source_ref)
     if not drafts:
         await status.edit_text(t("ai_nothing_found", lang), reply_markup=kb.main_menu(lang))
@@ -182,13 +169,13 @@ async def text_input(message: types.Message, state: FSMContext, lang: str):
     await analyze(message, state, lang, text=message.text, source_ref=parser.fingerprint(message.text))
 
 
-@dp.message_handler(state=INPUT_STATES, content_types=types.ContentTypes.PHOTO)
+@dp.message_handler(state=MEDIA_STATES, content_types=types.ContentTypes.PHOTO)
 async def photo_input(message: types.Message, state: FSMContext, lang: str):
     photo = message.photo[-1]  # largest size
     await analyze_file(message, state, lang, photo.file_id, photo.file_unique_id, "image/jpeg")
 
 
-@dp.message_handler(state=INPUT_STATES, content_types=types.ContentTypes.DOCUMENT)
+@dp.message_handler(state=MEDIA_STATES, content_types=types.ContentTypes.DOCUMENT)
 async def document_input(message: types.Message, state: FSMContext, lang: str):
     document = message.document
     mime = (document.mime_type or "").lower()
@@ -199,7 +186,7 @@ async def document_input(message: types.Message, state: FSMContext, lang: str):
                        size=document.file_size)
 
 
-@dp.message_handler(state=INPUT_STATES, content_types=[types.ContentType.VOICE, types.ContentType.AUDIO,
+@dp.message_handler(state=MEDIA_STATES, content_types=[types.ContentType.VOICE, types.ContentType.AUDIO,
                                                      types.ContentType.VIDEO_NOTE])
 async def voice_input(message: types.Message, state: FSMContext, lang: str):
     # Claude has no audio input

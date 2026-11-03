@@ -34,3 +34,7 @@ class AIDraft(StatesGroup):
 
 class BudgetForm(StatesGroup):
     amount = State()  # typing the monthly limit of a category
+
+
+class AskAI(StatesGroup):
+    question = State()  # Ask AI mode: every text message is a question to the assistant

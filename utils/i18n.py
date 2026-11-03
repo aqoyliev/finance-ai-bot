@@ -78,7 +78,8 @@ TEXTS = {
               "bilan solishtirish; kategoriyani bosing — subkategoriyalar; ◀ ▶ — boshqa davrlar "
               "(o'tkazmalar hisobga olinmaydi)\n"
               "🧾 Tarix — so'nggi amallar; amalni ochib tahrirlash yoki o'chirish mumkin\n"
-              "⚙️ Sozlamalar — hisoblar, byudjetlar va til\n\n"
+              "🤖 AI'dan so'rash — moliyangiz haqida savol bering\n"
+              "⚙️ Sozlamalar — hisoblar, byudjetlar, AI maslahatlari va til\n\n"
               "<b>🎯 Byudjetlar va ogohlantirishlar</b>\n"
               "Sozlamalar → Byudjetlar: kategoriya uchun oylik limit. Limitning yoki kredit karta limitining "
               "80% va 100% ga yetganda bot xabar yuboradi (har bir davrda har biri bir marta).\n\n"
@@ -86,7 +87,12 @@ TEXTS = {
               "Menyusiz yozish: chek rasmini, bank SMS'ini yoki oddiy matnni yuboring "
               "(masalan «taksi 25000 uob kartadan», «kofe 18 ming naqd»). Bot qoralama ko'rsatadi — "
               "tekshiring, kerak bo'lsa tahrirlang va ✅ Saqlash ni bosing. "
-              "Rasm va matn tahlil uchun Anthropic Claude'ga yuboriladi.",
+              "Rasm va matn tahlil uchun Anthropic Claude'ga yuboriladi.\n\n"
+              "<b>💬 AI'dan so'rash va maslahatlar</b>\n"
+              "🤖 AI'dan so'rash tugmasini bosing yoki shunchaki savol yozing (masalan «bu oy taksiga qancha "
+              "ketdi?»). Har dushanba 09:00 da haftalik xulosa, yangi moliyaviy oy boshlanganda 09:00 da oylik "
+              "xulosa keladi; Sozlamalar → AI maslahatlari'da o'chirish mumkin. Savollar va hisob-kitob "
+              "xulosalari Anthropic'ga yuboriladi.",
         "ru": "<b>Команды</b>\n"
               "/start — главное меню\n"
               "/salaryday 5 — день начала финансового месяца (1–28)\n"
@@ -99,7 +105,8 @@ TEXTS = {
               "📊 Отчёт — финансовый месяц: доходы, расходы, диаграмма по категориям и сравнение с прошлым "
               "периодом; нажмите категорию — подкатегории; ◀ ▶ — другие периоды (переводы не учитываются)\n"
               "🧾 История — последние операции; откройте операцию, чтобы изменить или удалить её\n"
-              "⚙️ Настройки — счета, бюджеты и язык\n\n"
+              "🤖 Спросить AI — вопросы о ваших финансах\n"
+              "⚙️ Настройки — счета, бюджеты, AI-советы и язык\n\n"
               "<b>🎯 Бюджеты и предупреждения</b>\n"
               "Настройки → Бюджеты: месячный лимит на категорию. Бот напишет, когда лимит или кредитный лимит "
               "карты дойдёт до 80% и 100% (по одному разу за период).\n\n"
@@ -107,7 +114,12 @@ TEXTS = {
               "Без меню: отправьте фото чека, банковское SMS или просто текст "
               "(например «такси 25000 uob», «кофе 18 тысяч наличными»). Бот покажет черновик — проверьте, "
               "при необходимости измените и нажмите ✅ Сохранить. "
-              "Фото и текст отправляются на анализ в Anthropic Claude.",
+              "Фото и текст отправляются на анализ в Anthropic Claude.\n\n"
+              "<b>💬 Вопросы к AI и советы</b>\n"
+              "Нажмите 🤖 Спросить AI или просто напишите вопрос (например «сколько я потратил на такси в этом "
+              "месяце?»). Каждый понедельник в 09:00 приходит недельная сводка, а в 09:00 в первый день нового "
+              "финансового месяца — месячная; отключить: Настройки → AI-советы. Вопросы и сводки по вашим "
+              "данным отправляются в Anthropic.",
         "en": "<b>Commands</b>\n"
               "/start — main menu\n"
               "/salaryday 5 — day your financial month starts (1–28)\n"
@@ -121,7 +133,8 @@ TEXTS = {
               "the previous period; tap a category for subcategories; ◀ ▶ for other periods "
               "(transfers are not counted)\n"
               "🧾 History — recent operations; open one to edit or delete it\n"
-              "⚙️ Settings — accounts, budgets and language\n\n"
+              "🤖 Ask AI — questions about your finances\n"
+              "⚙️ Settings — accounts, budgets, AI advice and language\n\n"
               "<b>🎯 Budgets and alerts</b>\n"
               "Settings → Budgets: a monthly limit per category. The bot messages you when a budget or a credit "
               "card limit reaches 80% and 100% (once per period each).\n\n"
@@ -129,7 +142,12 @@ TEXTS = {
               "Skip the menus: send a receipt photo, a bank SMS or plain text "
               "(e.g. \"taxi 25000 from uob\", \"got salary 12m to hamkorbank\"). The bot shows a draft — "
               "check it, edit if needed and press ✅ Save. "
-              "Photos and text are sent to Anthropic Claude for analysis.",
+              "Photos and text are sent to Anthropic Claude for analysis.\n\n"
+              "<b>💬 Ask AI and advice</b>\n"
+              "Press 🤖 Ask AI or just type a question (e.g. \"how much did I spend on taxi this month?\"). "
+              "A weekly summary arrives every Monday at 09:00 and a monthly review at 09:00 on the first day of "
+              "a new financial month; turn them off in Settings → AI advice. Questions and summaries of your "
+              "data are sent to Anthropic.",
     },
     "use_menu": {
         "uz": "Quyidagi menyudan foydalaning.",
@@ -670,6 +688,7 @@ TEXTS = {
         "en": "Expenses by category, {currency}",
     },
     "report_chart_other": {"uz": "Boshqa", "ru": "Другое", "en": "Other"},
+    "report_chart_total": {"uz": "Jami: {amount}", "ru": "Итого: {amount}", "en": "Total: {amount}"},
 
     # ---- Budgets ----
     "btn_budgets": {"uz": "🎯 Byudjetlar", "ru": "🎯 Бюджеты", "en": "🎯 Budgets"},
@@ -727,5 +746,86 @@ TEXTS = {
         "uz": "🚨 «{name}» kredit limiti to'ldi: qarz {used} / {limit} ({percent}%).\n{bar}",
         "ru": "🚨 Кредитный лимит «{name}» исчерпан: долг {used} / {limit} ({percent}%).\n{bar}",
         "en": "🚨 Credit limit of \"{name}\" is reached: debt {used} / {limit} ({percent}%).\n{bar}",
+    },
+
+    # ---- Ask AI ----
+    "btn_ask_ai": {"uz": "🤖 AI'DAN SO'RASH", "ru": "🤖 СПРОСИТЬ AI", "en": "🤖 ASK AI"},
+    "btn_menu": {"uz": "🏠 Menyu", "ru": "🏠 Меню", "en": "🏠 Menu"},
+    "btn_advice_now": {"uz": "💡 Maslahat olish", "ru": "💡 Получить совет", "en": "💡 Get advice now"},
+    "ask_intro": {
+        "uz": "<b>🤖 AI'dan so'rash</b>\n\nMoliyangiz haqida savol yozing, masalan:\n"
+              "• Bu oy taksiga qancha ketdi?\n• O'tgan oyga nisbatan ko'proq sarfladimmi?\n"
+              "• Kredit kartamda qancha limit qoldi?\n\n"
+              "Qo'shimcha savollar ham berishingiz mumkin. Chiqish uchun 🏠 Menyu ni bosing.\n"
+              "<i>Savollar va kerakli ma'lumotlar Anthropic Claude'ga yuboriladi.</i>",
+        "ru": "<b>🤖 Спросить AI</b>\n\nНапишите вопрос о своих финансах, например:\n"
+              "• Сколько я потратил на такси в этом месяце?\n• Я трачу больше, чем в прошлом месяце?\n"
+              "• Сколько осталось лимита на кредитке?\n\n"
+              "Можно задавать уточняющие вопросы. Чтобы выйти, нажмите 🏠 Меню.\n"
+              "<i>Вопросы и нужные данные отправляются в Anthropic Claude.</i>",
+        "en": "<b>🤖 Ask AI</b>\n\nAsk anything about your finances, for example:\n"
+              "• How much did I spend on taxi this month?\n• Am I spending more than last month?\n"
+              "• How much credit is left on my card?\n\n"
+              "Follow-up questions work too. Press 🏠 Menu to leave.\n"
+              "<i>Questions and the data needed to answer them are sent to Anthropic Claude.</i>",
+    },
+    "ask_thinking": {"uz": "🤔 O'ylayapman...", "ru": "🤔 Думаю...", "en": "🤔 Thinking..."},
+    "ask_error_refused": {
+        "uz": "AI bu savolga javob bermadi. Savolni boshqacha yozib ko'ring.",
+        "ru": "AI не стал отвечать на этот вопрос. Попробуйте сформулировать иначе.",
+        "en": "The AI declined to answer this. Try rephrasing the question.",
+    },
+    "ask_error_bad_input": {
+        "uz": "AI so'rovni qabul qilmadi. Qayta urinib ko'ring yoki 🏠 Menyu dan yangi suhbat boshlang.",
+        "ru": "AI не принял запрос. Попробуйте ещё раз или начните новый диалог через 🏠 Меню.",
+        "en": "The AI rejected the request. Try again or start a new conversation from 🏠 Menu.",
+    },
+
+    # ---- AI advice ----
+    "btn_ai_advice": {"uz": "🤖 AI maslahatlari", "ru": "🤖 AI-советы", "en": "🤖 AI advice"},
+    "btn_advice_weekly": {"uz": "Haftalik xulosa", "ru": "Недельная сводка", "en": "Weekly summary"},
+    "btn_advice_monthly": {"uz": "Oylik xulosa", "ru": "Месячная сводка", "en": "Monthly review"},
+    "advice_on": {"uz": "yoqilgan", "ru": "включена", "en": "on"},
+    "advice_off": {"uz": "o'chirilgan", "ru": "выключена", "en": "off"},
+    "advice_settings": {
+        "uz": "<b>🤖 AI maslahatlari</b>\n\n"
+              "📅 Haftalik xulosa — har dushanba 09:00 da: o'tgan 7 kun, oldingi hafta bilan solishtirish, "
+              "tejash bo'yicha maslahatlar. Holati: {weekly}\n"
+              "📆 Oylik xulosa — yangi moliyaviy oy boshlanadigan kuni ({salary_day}-sana) 09:00 da: butun davr, "
+              "byudjetlar, kredit kartalar. Holati: {monthly}\n\n"
+              "Davrda amallar bo'lmasa, xulosa yuborilmaydi. Hisob-kitob xulosalari Anthropic Claude'ga yuboriladi.",
+        "ru": "<b>🤖 AI-советы</b>\n\n"
+              "📅 Недельная сводка — каждый понедельник в 09:00: последние 7 дней, сравнение с прошлой неделей, "
+              "советы по экономии. Сейчас: {weekly}\n"
+              "📆 Месячная сводка — в день начала нового финансового месяца ({salary_day}-е число) в 09:00: весь "
+              "период, бюджеты, кредитные карты. Сейчас: {monthly}\n\n"
+              "Если операций за период не было, сводка не отправляется. Сводки по вашим данным отправляются в "
+              "Anthropic Claude.",
+        "en": "<b>🤖 AI advice</b>\n\n"
+              "📅 Weekly summary — every Monday at 09:00: the last 7 days compared with the week before, plus "
+              "saving tips. Now: {weekly}\n"
+              "📆 Monthly review — at 09:00 on the day your new financial month starts (day {salary_day}): the "
+              "whole period, budgets and credit cards. Now: {monthly}\n\n"
+              "Nothing is sent for a period without operations. Summaries of your data are sent to Anthropic Claude.",
+    },
+    "advice_preparing": {
+        "uz": "⏳ Maslahat tayyorlanmoqda...", "ru": "⏳ Готовлю совет...", "en": "⏳ Preparing advice...",
+    },
+    "advice_no_data": {
+        "uz": "Maslahat uchun ma'lumot yetarli emas: bu davrda daromad yoki xarajat yo'q.",
+        "ru": "Пока недостаточно данных для совета: в этом периоде нет доходов и расходов.",
+        "en": "Not enough data for advice yet: no income or expenses in this period.",
+    },
+    "advice_title_weekly": {
+        "uz": "📅 <b>Haftalik xulosa</b> · {start} – {end}", "ru": "📅 <b>Недельная сводка</b> · {start} – {end}",
+        "en": "📅 <b>Weekly summary</b> · {start} – {end}",
+    },
+    "advice_title_monthly": {
+        "uz": "📆 <b>Oylik xulosa</b> · {start} – {end}", "ru": "📆 <b>Месячная сводка</b> · {start} – {end}",
+        "en": "📆 <b>Monthly review</b> · {start} – {end}",
+    },
+    "advice_title_now": {
+        "uz": "💡 <b>AI maslahati</b> · {start} – {end}", "ru": "💡 <b>Совет AI</b> · {start} – {end}",
+        "en": "💡 <b>AI advice</b> · {start} – {end}",
     },
 }

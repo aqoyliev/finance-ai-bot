@@ -29,7 +29,8 @@ def report_view(report, category_ids: Dict[str, int], lang: str) -> InlineKeyboa
         rows.append(nav)
     rows.append([InlineKeyboardButton(t("btn_budgets", lang), callback_data="bud:list"),
                  InlineKeyboardButton(t("btn_accounts", lang), callback_data="menu:accounts")])
-    rows.append([back_button(lang)])
+    rows.append([InlineKeyboardButton(t("btn_advice_now", lang), callback_data="ask:advice"),
+                 back_button(lang)])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 

@@ -40,6 +40,7 @@ A private personal-finance bot for a single owner, built on this template.
 - 🎯 Monthly budgets per expense category and 🔔 alerts at 80% / 100% of a budget or of a credit card limit
 - 🤖 AI input: record operations without menus from a receipt photo, a forwarded bank SMS
   or free text (see below)
+- 💬 Ask AI: questions about your own data in plain language, plus 📅 weekly and 📆 monthly AI advice
 
 All texts live in `utils/i18n.py`; operations are written through `record_operation` / `record_transfer`
 in `utils/db_api/operations.py`.
@@ -115,6 +116,36 @@ Without `ANTHROPIC_API_KEY` the bot works as before and answers that AI input is
 > **Privacy:** receipts and texts you send for AI input, together with the names of your accounts and
 > categories, are sent to Anthropic (Claude API) for processing. Balances and history are not sent.
 
+### Ask AI and automatic advice
+
+**Ask AI.** Press 🤖 ASK AI in the main menu and type questions ("how much did I spend on taxi this month?",
+"am I spending more than last month?", "how much credit is left?"). The bot stays in this mode, so follow-up
+questions work ("and last month?"), until you press 🏠 Menu. You can also just type a question without the
+button: the extraction model classifies every free-text message as an *operation*, a *question* or *other*;
+questions go to Ask AI, operations still become drafts. Photos, files and bank SMS always go to AI input.
+
+How it works (`utils/ai/assistant.py`, `utils/ai/tools.py`): the analysis model (`claude-opus-5-5`) gets
+read-only **client-side tools** backed by the service layer instead of a database dump:
+`get_period_summary`, `get_category_breakdown`, `search_transactions`, `get_accounts`, `get_budgets`,
+`get_categories`, `get_exchange_rate` (strict JSON schemas; results are compact JSON with amounts and
+currency; transfers are never income or expense). The bot runs the tool loop itself (at most 6 model requests
+and 4 minutes per question) and answers in your language as plain text. The conversation is kept in memory
+(FSM) for an hour; after 6 questions it is compacted to the last 3 question/answer pairs.
+
+**Advice.** 📅 a weekly summary every **Monday at 09:00** (Tashkent time): the last 7 days vs the 7 before,
+top categories, unusual spending, budget status and 2-4 saving tips. 📆 A monthly review at **09:00 on the
+first day of a new financial month** (your salary day): the finished period vs the one before, budgets,
+credit cards and advice for the new period. Turn either off in ⚙️ Settings → 🤖 AI advice; 💡 Get advice now
+(in Ask AI, the report and the advice settings) reviews the running period on demand. Nothing is sent for a
+window without income or expenses.
+The scheduler (`utils/advice_scheduler.py`) is an asyncio task started in `on_startup` that checks once a
+minute; what was sent is stored on the user row (migration `0004`), so a restart never sends twice and advice
+missed while the bot was down at 09:00 is sent on the next start the same day. The model gets pre-computed
+summaries, not raw rows.
+
+> **Privacy:** your questions, the data the assistant looks up to answer them (totals, categories,
+> matching operations, balances) and the summaries used for advice are sent to Anthropic (Claude API).
+
 ### Environment variables (`.env`)
 
 | Variable       | Description                                                              |
@@ -125,8 +156,10 @@ Without `ANTHROPIC_API_KEY` the bot works as before and answers that AI input is
 | `DATABASE_URL` | SQLAlchemy async URL, default `sqlite+aiosqlite:///./finora.db`          |
 | `ANTHROPIC_API_KEY` | Anthropic API key ([console.anthropic.com](https://console.anthropic.com/settings/keys)); empty = AI input off |
 | `CLAUDE_EXTRACT_MODEL` | Model for receipts, SMS and free text, default `claude-haiku-5-5` |
-| `CLAUDE_ANALYSIS_MODEL` | Model reserved for Q&A / advice (later phase), default `claude-opus-5-5` |
-| `CLAUDE_TIMEOUT` | Seconds to wait for Claude, default `60`                               |
+| `CLAUDE_ANALYSIS_MODEL` | Model for Ask AI and advice, default `claude-opus-5-5` |
+| `CLAUDE_TIMEOUT` | Seconds to wait for the extraction model, default `60`                   |
+| `CLAUDE_ANALYSIS_TIMEOUT` | Seconds per Ask AI / advice request, default `180`              |
+| `CLAUDE_REFUSAL_FALLBACK` | Retry a policy-declined Ask AI / advice request on Anthropic's recommended fallback model (server-side, beta), default `true` |
 
 `.env` is gitignored, so your secrets are never committed. Copy `.env.example` to start.
 
@@ -173,7 +206,7 @@ The Claude client is mocked, so no API key is needed and no requests are sent.
 ├── data/
 │   └── config.py          # Reads settings from .env
 ├── handlers/
-│   ├── users/             # start, help, menus, reports, budgets, ai_input (AI drafts), echo fallback
+│   ├── users/             # start, help, menus, reports, budgets, ai_input (AI drafts), ask_ai, advice, echo
 │   ├── groups/            # group chat handlers
 │   ├── channels/          # channel post handlers
 │   └── errors/            # global error handler
@@ -186,7 +219,8 @@ The Claude client is mocked, so no API key is needed and no requests are sent.
 ├── migrations/            # alembic migrations
 ├── tests/                 # pytest suite (service layer, reports / alerts / charts, AI parsing with a mocked Claude client)
 └── utils/
-    ├── ai/                # Claude client + prompt/schema (claude.py), validation (parser.py)
+    ├── ai/                # Claude client (claude.py), validation (parser.py), Ask AI + advice (assistant.py, tools.py)
+    ├── advice_scheduler.py # weekly / monthly advice (asyncio task)
     ├── charts.py          # matplotlib expense chart (PNG bytes)
     ├── db_api/            # database helpers (reports, budgets, alerts, operations, ...)
     ├── misc/              # logging, throttling decorator

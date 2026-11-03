@@ -30,7 +30,7 @@ def main_menu(lang: str) -> InlineKeyboardMarkup:
         [button("btn_expense", "expense"), button("btn_income", "income")],
         [button("btn_transfer", "transfer"), button("btn_accounts", "accounts")],
         [button("btn_report", "report"), button("btn_history", "history")],
-        [button("btn_settings", "settings")],
+        [button("btn_ask_ai", "ask"), button("btn_settings", "settings")],
     ])
 
 
@@ -79,6 +79,7 @@ def settings(lang: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(t("btn_accounts", lang), callback_data="menu:accounts")],
         [InlineKeyboardButton(t("btn_budgets", lang), callback_data="bud:list")],
+        [InlineKeyboardButton(t("btn_ai_advice", lang), callback_data="set:advice")],
         [InlineKeyboardButton(t("btn_language", lang), callback_data="set:lang")],
         [back_button(lang)],
     ])

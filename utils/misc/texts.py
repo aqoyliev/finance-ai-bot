@@ -181,3 +181,22 @@ def alert_text(alert, lang: str) -> str:
     return t(f"alert_{alert.kind}_{alert.threshold}", lang, name=alert.name,
              used=money_text(alert.used, alert.currency), limit=money_text(alert.limit, alert.currency),
              percent=str(alert.percent), bar=progress_bar(alert.percent))
+
+
+def split_message(text: str, limit: int = 4000) -> List[str]:
+    """Split a long (already escaped) text into Telegram-sized parts, preferring line breaks."""
+    parts = []
+    while len(text) > limit:
+        cut = text.rfind("\n", 0, limit)
+        if cut <= 0:
+            cut = text.rfind(" ", 0, limit)
+        if cut <= 0:
+            cut = limit
+        # never cut inside an HTML entity such as &amp;
+        amp = text.rfind("&", 0, cut)
+        if amp != -1 and ";" not in text[amp:cut]:
+            cut = amp
+        parts.append(text[:cut].rstrip())
+        text = text[cut:].lstrip("\n ")
+    parts.append(text)
+    return [part for part in parts if part] or [""]

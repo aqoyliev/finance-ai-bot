@@ -19,7 +19,7 @@ from loader import bot, dp
 from utils.charts import render_expense_chart
 from utils.db_api import finance as db
 from utils.i18n import t
-from utils.misc.money import short_money
+from utils.misc.money import money_text, short_money
 from utils.misc.texts import report_text, report_title, subcategory_text
 
 log = logging.getLogger(__name__)
@@ -40,7 +40,8 @@ async def make_chart(report: db.PeriodReport, lang: str) -> Optional[bytes]:
     currency, items, converted = series
     label = f"{currency} (USD → UZS)" if converted else currency
     title = t("report_chart_title", lang, currency=label, _escape=False)
-    total = f"{short_money(sum(amount for _, amount in items))} {currency}"
+    amount = money_text(sum(value for _, value in items), currency).replace(".00 ", " ")
+    total = t("report_chart_total", lang, amount=amount, _escape=False)  # drawn as two lines in the donut
     try:
         # matplotlib is CPU-bound: keep it off the event loop
         return await asyncio.to_thread(render_expense_chart, items, title, total,

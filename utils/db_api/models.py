@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import Optional
 
-from sqlalchemy import BigInteger, Date, DateTime, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import BigInteger, Date, DateTime, ForeignKey, Integer, String, UniqueConstraint, true
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base
@@ -20,6 +20,11 @@ class User(Base):
     # True once default accounts/categories were created (in the chosen language)
     is_seeded: Mapped[bool] = mapped_column(default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime)
+    # Automatic AI advice (Settings -> AI advice) and the last one handled, so a restart neither skips nor repeats
+    advice_weekly: Mapped[bool] = mapped_column(default=True, server_default=true())
+    advice_monthly: Mapped[bool] = mapped_column(default=True, server_default=true())
+    advice_weekly_sent: Mapped[Optional[date]] = mapped_column(Date)  # the Monday of the last weekly advice
+    advice_monthly_sent: Mapped[Optional[date]] = mapped_column(Date)  # start of the period it was sent on
 
 
 class Account(Base):

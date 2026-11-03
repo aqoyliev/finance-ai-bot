@@ -307,3 +307,9 @@ async def save_draft(user_id: int, draft: Draft) -> db.SavedOperation:
         user_id, draft.kind, draft.currency, [db.Leg(draft.account_id, draft.amount_minor)],
         category=draft.category, subcategory=draft.subcategory, note=draft.note,
         occurred_at=occurred_at(draft), source="ai", source_ref=draft.source_ref)
+
+
+def intent(raw: Any) -> str:
+    """Intent of a free-text message from the extraction answer; 'operation' when missing or unknown."""
+    value = raw.get("intent") if isinstance(raw, dict) else None
+    return value if value in ("operation", "question", "other") else "operation"
