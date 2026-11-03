@@ -73,7 +73,9 @@ class Transaction(Base):
     category: Mapped[Optional[str]] = mapped_column(String)
     subcategory: Mapped[Optional[str]] = mapped_column(String)
     note: Mapped[Optional[str]] = mapped_column(String)
-    source: Mapped[str] = mapped_column(String, default="manual")  # manual | ai (later phases)
+    source: Mapped[str] = mapped_column(String, default="manual")  # manual | ai
+    # Fingerprint of the AI input (e.g. hash of a bank SMS) used to warn about duplicates
+    source_ref: Mapped[Optional[str]] = mapped_column(String(64), index=True)
     occurred_at: Mapped[datetime] = mapped_column(DateTime, index=True)
 
 

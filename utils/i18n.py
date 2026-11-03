@@ -76,7 +76,12 @@ TEXTS = {
               "💳 Hisoblar — hisoblar, kredit limiti va qarz; qo'shish, tahrirlash, o'chirish\n"
               "📊 Hisobot — moliyaviy oy uchun daromad va xarajatlar (o'tkazmalar hisobga olinmaydi)\n"
               "🧾 Tarix — so'nggi amallar; amalni ochib tahrirlash yoki o'chirish mumkin\n"
-              "⚙️ Sozlamalar — hisoblar va til",
+              "⚙️ Sozlamalar — hisoblar va til\n\n"
+              "<b>🤖 AI kiritish</b>\n"
+              "Menyusiz yozish: chek rasmini, ovozli xabarni, bank SMS'ini yoki oddiy matnni yuboring "
+              "(masalan «taksi 25000 uob kartadan», «kofe 18 ming naqd»). Bot qoralama ko'rsatadi — "
+              "tekshiring, kerak bo'lsa tahrirlang va ✅ Saqlash ni bosing. "
+              "Rasm va ovoz tahlil uchun Google Gemini'ga yuboriladi.",
         "ru": "<b>Команды</b>\n"
               "/start — главное меню\n"
               "/salaryday 5 — день начала финансового месяца (1–28)\n"
@@ -88,7 +93,12 @@ TEXTS = {
               "💳 Счета — счета, кредитный лимит и долг; добавить, изменить, отключить\n"
               "📊 Отчёт — доходы и расходы за финансовый месяц (переводы не учитываются)\n"
               "🧾 История — последние операции; откройте операцию, чтобы изменить или удалить её\n"
-              "⚙️ Настройки — счета и язык",
+              "⚙️ Настройки — счета и язык\n\n"
+              "<b>🤖 AI-ввод</b>\n"
+              "Без меню: отправьте фото чека, голосовое, банковское SMS или просто текст "
+              "(например «такси 25000 uob», «кофе 18 тысяч наличными»). Бот покажет черновик — проверьте, "
+              "при необходимости измените и нажмите ✅ Сохранить. "
+              "Фото и голос отправляются на анализ в Google Gemini.",
         "en": "<b>Commands</b>\n"
               "/start — main menu\n"
               "/salaryday 5 — day your financial month starts (1–28)\n"
@@ -100,7 +110,12 @@ TEXTS = {
               "💳 Accounts — accounts, credit limit and debt; add, edit, deactivate\n"
               "📊 Report — income and expenses for the financial month (transfers are not counted)\n"
               "🧾 History — recent operations; open one to edit or delete it\n"
-              "⚙️ Settings — accounts and language",
+              "⚙️ Settings — accounts and language\n\n"
+              "<b>🤖 AI input</b>\n"
+              "Skip the menus: send a receipt photo, a voice message, a bank SMS or plain text "
+              "(e.g. \"taxi 25000 from uob\", \"got salary 12m to hamkorbank\"). The bot shows a draft — "
+              "check it, edit if needed and press ✅ Save. "
+              "Photos and voice are sent to Google Gemini for analysis.",
     },
     "use_menu": {
         "uz": "Quyidagi menyudan foydalaning.",
@@ -450,5 +465,129 @@ TEXTS = {
     "operation_deleted": {
         "uz": "🗑 Amal o'chirildi. Yangi qoldiqlar:", "ru": "🗑 Операция удалена. Новые остатки:",
         "en": "🗑 Operation deleted. New balances:",
+    },
+
+    # ---- AI input (receipts, voice, free text, bank SMS) ----
+    "ai_not_configured": {
+        "uz": "🤖 AI kiritish sozlanmagan (GEMINI_API_KEY yo'q). Menyudan foydalaning.",
+        "ru": "🤖 AI-ввод не настроен (нет GEMINI_API_KEY). Воспользуйтесь меню.",
+        "en": "🤖 AI input is not configured (no GEMINI_API_KEY). Please use the menu.",
+    },
+    "ai_analyzing": {"uz": "⏳ Tahlil qilinmoqda...", "ru": "⏳ Анализирую...", "en": "⏳ Analyzing..."},
+    "ai_nothing_found": {
+        "uz": "🤖 Bu xabarda amal topilmadi. Aniqroq yozing (masalan: «taksi 25000 uob») "
+              "yoki menyudan foydalaning.",
+        "ru": "🤖 Не нашёл операций в сообщении. Напишите точнее (например: «такси 25000 uob») "
+              "или воспользуйтесь меню.",
+        "en": "🤖 No operation found in this message. Try again (e.g. \"taxi 25000 uob\") or use the menu.",
+    },
+    "ai_unsupported_file": {
+        "uz": "Bu fayl turini o'qiy olmayman. Rasm, PDF yoki ovozli xabar yuboring.",
+        "ru": "Не могу прочитать этот тип файла. Отправьте фото, PDF или голосовое сообщение.",
+        "en": "I can't read this file type. Send a photo, a PDF or a voice message.",
+    },
+    "ai_error_timeout": {
+        "uz": "⌛ AI vaqtida javob bermadi. Birozdan so'ng qayta urinib ko'ring.",
+        "ru": "⌛ AI не ответил вовремя. Попробуйте ещё раз чуть позже.",
+        "en": "⌛ The AI did not answer in time. Please try again a bit later.",
+    },
+    "ai_error_quota": {
+        "uz": "🚦 AI so'rovlar limiti tugadi. Keyinroq urinib ko'ring yoki menyudan foydalaning.",
+        "ru": "🚦 Исчерпан лимит запросов к AI. Попробуйте позже или воспользуйтесь меню.",
+        "en": "🚦 The AI request quota is exhausted. Try later or use the menu.",
+    },
+    "ai_error_auth": {
+        "uz": "🔑 GEMINI_API_KEY noto'g'ri yoki unga ruxsat yo'q.",
+        "ru": "🔑 GEMINI_API_KEY неверный или не имеет доступа.",
+        "en": "🔑 GEMINI_API_KEY is invalid or has no access.",
+    },
+    "ai_error_bad_input": {
+        "uz": "AI bu faylni o'qiy olmadi. Boshqa rasm yuboring yoki matn bilan yozing.",
+        "ru": "AI не смог прочитать этот файл. Отправьте другое фото или напишите текстом.",
+        "en": "The AI could not read this file. Send another photo or type it as text.",
+    },
+    "ai_error_unavailable": {
+        "uz": "AI xizmati hozir ishlamayapti. Keyinroq urinib ko'ring.",
+        "ru": "Сервис AI сейчас недоступен. Попробуйте позже.",
+        "en": "The AI service is unavailable right now. Please try later.",
+    },
+    "ai_error_bad_response": {
+        "uz": "AI tushunarsiz javob qaytardi. Qayta urinib ko'ring.",
+        "ru": "AI вернул непонятный ответ. Попробуйте ещё раз.",
+        "en": "The AI returned an unreadable answer. Please try again.",
+    },
+    "ai_error_too_large": {
+        "uz": "Fayl juda katta (15 MB gacha).", "ru": "Файл слишком большой (до 15 МБ).",
+        "en": "The file is too large (up to 15 MB).",
+    },
+    "ai_draft_title": {
+        "uz": "🤖 <b>Qoralama {index}/{total}</b> · {kind}", "ru": "🤖 <b>Черновик {index}/{total}</b> · {kind}",
+        "en": "🤖 <b>Draft {index}/{total}</b> · {kind}",
+    },
+    "ai_date_now": {"uz": "hozir", "ru": "сейчас", "en": "now"},
+    "ai_missing": {"uz": "✍️ To'ldiring: {fields}", "ru": "✍️ Заполните: {fields}", "en": "✍️ Please fill in: {fields}"},
+    "ai_field_amount": {"uz": "summa", "ru": "сумма", "en": "amount"},
+    "ai_field_currency": {"uz": "valyuta", "ru": "валюта", "en": "currency"},
+    "ai_field_account": {"uz": "hisob", "ru": "счёт", "en": "account"},
+    "ai_field_to_account": {"uz": "qabul qiluvchi hisob", "ru": "счёт получателя", "en": "receiving account"},
+    "ai_field_category": {"uz": "kategoriya", "ru": "категория", "en": "category"},
+    "ai_duplicate": {
+        "uz": "⚠️ Shunga o'xshash amal allaqachon saqlangan (o'sha summa va hisob yoki o'sha xabar). "
+              "Ikki marta yozmayotganingizni tekshiring.",
+        "ru": "⚠️ Похожая операция уже сохранена (та же сумма и счёт или то же сообщение). "
+              "Проверьте, чтобы не записать дважды.",
+        "en": "⚠️ A similar operation is already saved (same amount and account, or the same message). "
+              "Make sure you are not recording it twice.",
+    },
+    "ai_low_confidence": {
+        "uz": "🤔 AI ishonchi past — ma'lumotlarni tekshiring.", "ru": "🤔 AI не уверен — проверьте данные.",
+        "en": "🤔 The AI is not sure — please check the details.",
+    },
+    "ai_note_amount": {
+        "uz": "ℹ️ Summani aniqlab bo'lmadi.", "ru": "ℹ️ Не удалось распознать сумму.",
+        "en": "ℹ️ The amount could not be recognized.",
+    },
+    "ai_note_currency": {
+        "uz": "ℹ️ Valyuta qo'llab-quvvatlanmaydi — UZS yoki USD ni tanlang.",
+        "ru": "ℹ️ Валюта не поддерживается — выберите UZS или USD.",
+        "en": "ℹ️ Unsupported currency — choose UZS or USD.",
+    },
+    "ai_note_account_currency": {
+        "uz": "ℹ️ Topilgan hisob valyutasi mos emas — hisobni tanlang.",
+        "ru": "ℹ️ Валюта найденного счёта не совпадает — выберите счёт.",
+        "en": "ℹ️ The matched account has a different currency — choose an account.",
+    },
+    "btn_ai_save": {"uz": "✅ Saqlash", "ru": "✅ Сохранить", "en": "✅ Save"},
+    "btn_ai_save_all": {"uz": "✅ Hammasini saqlash", "ru": "✅ Сохранить все", "en": "✅ Save all"},
+    "btn_ai_skip": {"uz": "⏭ O'tkazib yuborish", "ru": "⏭ Пропустить", "en": "⏭ Skip"},
+    "btn_ai_cancel": {"uz": "❌ Bekor qilish", "ru": "❌ Отмена", "en": "❌ Cancel"},
+    "btn_ai_amount": {"uz": "✏️ Summa", "ru": "✏️ Сумма", "en": "✏️ Amount"},
+    "btn_ai_category": {"uz": "✏️ Kategoriya", "ru": "✏️ Категория", "en": "✏️ Category"},
+    "btn_ai_account": {"uz": "✏️ Hisob", "ru": "✏️ Счёт", "en": "✏️ Account"},
+    "btn_ai_to_account": {"uz": "✏️ Qayerga", "ru": "✏️ Куда", "en": "✏️ To account"},
+    "btn_ai_kind": {"uz": "✏️ Turi", "ru": "✏️ Тип", "en": "✏️ Type"},
+    "btn_ai_currency": {"uz": "✏️ Valyuta", "ru": "✏️ Валюта", "en": "✏️ Currency"},
+    "btn_ai_date": {"uz": "✏️ Sana", "ru": "✏️ Дата", "en": "✏️ Date"},
+    "ai_ask_kind": {"uz": "Amal turini tanlang:", "ru": "Выберите тип операции:", "en": "Choose the operation type:"},
+    "ai_ask_to_account": {
+        "uz": "Qaysi hisobga o'tkaziladi ({currency})?", "ru": "На какой счёт перевод ({currency})?",
+        "en": "Which account receives the money ({currency})?",
+    },
+    "ai_ask_date": {
+        "uz": "Sanani kiriting: 04.11.2026 yoki 04.11.2026 14:30",
+        "ru": "Введите дату: 04.11.2026 или 04.11.2026 14:30",
+        "en": "Enter the date: 04.11.2026 or 04.11.2026 14:30",
+    },
+    "ai_bad_date": {
+        "uz": "Sana noto'g'ri. Format: 04.11.2026 14:30 (oxirgi bir yil ichida).",
+        "ru": "Неверная дата. Формат: 04.11.2026 14:30 (в пределах последнего года).",
+        "en": "Invalid date. Format: 04.11.2026 14:30 (within the last year).",
+    },
+    "ai_saved": {"uz": "✅ Saqlandi: {summary}", "ru": "✅ Сохранено: {summary}", "en": "✅ Saved: {summary}"},
+    "ai_skipped": {"uz": "⏭ O'tkazib yuborildi.", "ru": "⏭ Пропущено.", "en": "⏭ Skipped."},
+    "ai_save_failed": {
+        "uz": "Saqlab bo'lmadi: hisob topilmadi yoki valyuta mos emas. Hisobni qayta tanlang.",
+        "ru": "Не удалось сохранить: счёт не найден или валюта не совпадает. Выберите счёт заново.",
+        "en": "Could not save: the account was not found or its currency differs. Choose the account again.",
     },
 }

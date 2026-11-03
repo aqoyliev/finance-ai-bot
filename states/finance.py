@@ -24,3 +24,9 @@ class AccountEdit(StatesGroup):
 
 class OperationEdit(StatesGroup):
     amount = State()
+
+
+class AIDraft(StatesGroup):
+    review = State()  # AI drafts are shown; free text / media starts a new analysis
+    amount = State()  # typing a corrected amount for the current draft
+    date = State()  # typing a corrected date for the current draft

@@ -5,10 +5,10 @@ later input channels (AI parsing of receipts, voice, SMS) can call them after th
 """
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Sequence
 
-from sqlalchemy import and_, not_, select
+from sqlalchemy import and_, not_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .accounts import is_over_limit, load_account
@@ -68,6 +68,7 @@ async def record_operation(
     user_id: int, kind: str, currency: str, legs: Sequence[Leg],
     category: Optional[str] = None, subcategory: Optional[str] = None, note: Optional[str] = None,
     occurred_at: Optional[datetime] = None, group_id: Optional[str] = None, source: str = "manual",
+    source_ref: Optional[str] = None,
 ) -> SavedOperation:
     """Record an expense or income paid from one or more accounts and update balances atomically.
 
@@ -90,7 +91,8 @@ async def record_operation(
             tx = Transaction(
                 user_id=user_id, group_id=group_id, account_id=account.id, kind=kind, direction=direction,
                 amount_minor=leg.amount_minor, currency=currency, category=category,
-                subcategory=subcategory, note=note, source=source, occurred_at=occurred_at,
+                subcategory=subcategory, note=note, source=source, source_ref=source_ref,
+                occurred_at=occurred_at,
             )
             # Credit accounts store debt as a negative balance, so an expense lowers it as well
             account.balance_minor += effect(tx)
@@ -103,6 +105,7 @@ async def record_operation(
 async def record_transfer(
     user_id: int, from_account_id: int, to_account_id: int, amount_minor: int,
     note: Optional[str] = None, occurred_at: Optional[datetime] = None, source: str = "manual",
+    source_ref: Optional[str] = None,
 ) -> SavedOperation:
     """Move money between two own accounts of the same currency (e.g. repay a credit card).
 
@@ -124,7 +127,8 @@ async def record_transfer(
             tx = Transaction(
                 user_id=user_id, group_id=group_id, account_id=account.id, kind="transfer",
                 direction=direction, amount_minor=amount_minor, currency=account.currency,
-                note=note, source=source, occurred_at=occurred_at,
+                note=note, source=source, source_ref=source_ref if direction == "out" else None,
+                occurred_at=occurred_at,
             )
             account.balance_minor += effect(tx)
             session.add(tx)
@@ -176,6 +180,29 @@ async def recent_operations(user_id: int, limit: int = 10) -> List[OperationView
             .order_by(Transaction.occurred_at.desc(), Transaction.id.desc())
             .limit(limit))
         return [await _view(session, user_id, await _rows_to_change(session, user_id, tx.id)) for tx in rows]
+
+
+async def find_similar(
+    user_id: int, amount_minor: Optional[int], account_id: Optional[int], around: datetime,
+    source_ref: Optional[str] = None, window: timedelta = timedelta(minutes=10),
+) -> List[Transaction]:
+    """Possible duplicates of a new operation: the same input fingerprint, or the same amount on the
+    same account within `window` of `around`. Incoming transfer legs are ignored."""
+    conditions = []
+    if source_ref:
+        conditions.append(Transaction.source_ref == source_ref)
+    if amount_minor and account_id:
+        conditions.append(and_(Transaction.amount_minor == amount_minor, Transaction.account_id == account_id,
+                               Transaction.occurred_at.between(around - window, around + window)))
+    if not conditions:
+        return []
+    incoming_transfer = and_(Transaction.kind == "transfer", Transaction.direction == "in")
+    async with session_factory() as session:
+        rows = await session.scalars(
+            select(Transaction)
+            .where(Transaction.user_id == user_id, not_(incoming_transfer), or_(*conditions))
+            .order_by(Transaction.occurred_at.desc()).limit(5))
+        return list(rows)
 
 
 # ---- Edit / delete ----

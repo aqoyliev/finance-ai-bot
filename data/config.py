@@ -13,3 +13,8 @@ IP = env.str("ip")  # Hosting IP address
 OPENAI_API_KEY = env.str("OPENAI_API_KEY", default="")  # OpenAI API key for AI parsing
 DATABASE_URL = env.str("DATABASE_URL", default="sqlite+aiosqlite:///./finora.db")  # SQLAlchemy async DB URL
 WEBAPP_URL = env.str("WEBAPP_URL", default="http://localhost:8000")  # Mini App backend base URL
+
+# --- AI input (Google Gemini via Google AI Studio) ---
+GEMINI_API_KEY = env.str("GEMINI_API_KEY", default="")  # empty = AI input disabled
+GEMINI_MODEL = env.str("GEMINI_MODEL", default="gemini-3.6-flash")  # fast multimodal model (text, image, audio)
+GEMINI_TIMEOUT = env.int("GEMINI_TIMEOUT", default=60)  # seconds per request
