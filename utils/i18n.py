@@ -74,9 +74,14 @@ TEXTS = {
               "➖ Xarajat / ➕ Daromad — amalni yozish (xaridni bir nechta hisobdan to'lash mumkin)\n"
               "🔁 O'tkazma — o'z hisoblaringiz orasida pul o'tkazish, kredit kartani so'ndirish\n"
               "💳 Hisoblar — hisoblar, kredit limiti va qarz; qo'shish, tahrirlash, o'chirish\n"
-              "📊 Hisobot — moliyaviy oy uchun daromad va xarajatlar (o'tkazmalar hisobga olinmaydi)\n"
+              "📊 Hisobot — moliyaviy oy: daromad, xarajat, kategoriyalar bo'yicha diagramma va oldingi davr "
+              "bilan solishtirish; kategoriyani bosing — subkategoriyalar; ◀ ▶ — boshqa davrlar "
+              "(o'tkazmalar hisobga olinmaydi)\n"
               "🧾 Tarix — so'nggi amallar; amalni ochib tahrirlash yoki o'chirish mumkin\n"
-              "⚙️ Sozlamalar — hisoblar va til\n\n"
+              "⚙️ Sozlamalar — hisoblar, byudjetlar va til\n\n"
+              "<b>🎯 Byudjetlar va ogohlantirishlar</b>\n"
+              "Sozlamalar → Byudjetlar: kategoriya uchun oylik limit. Limitning yoki kredit karta limitining "
+              "80% va 100% ga yetganda bot xabar yuboradi (har bir davrda har biri bir marta).\n\n"
               "<b>🤖 AI kiritish</b>\n"
               "Menyusiz yozish: chek rasmini, bank SMS'ini yoki oddiy matnni yuboring "
               "(masalan «taksi 25000 uob kartadan», «kofe 18 ming naqd»). Bot qoralama ko'rsatadi — "
@@ -91,9 +96,13 @@ TEXTS = {
               "➖ Расход / ➕ Доход — записать операцию (покупку можно оплатить с нескольких счетов)\n"
               "🔁 Перевод — перевод между своими счетами, погашение кредитной карты\n"
               "💳 Счета — счета, кредитный лимит и долг; добавить, изменить, отключить\n"
-              "📊 Отчёт — доходы и расходы за финансовый месяц (переводы не учитываются)\n"
+              "📊 Отчёт — финансовый месяц: доходы, расходы, диаграмма по категориям и сравнение с прошлым "
+              "периодом; нажмите категорию — подкатегории; ◀ ▶ — другие периоды (переводы не учитываются)\n"
               "🧾 История — последние операции; откройте операцию, чтобы изменить или удалить её\n"
-              "⚙️ Настройки — счета и язык\n\n"
+              "⚙️ Настройки — счета, бюджеты и язык\n\n"
+              "<b>🎯 Бюджеты и предупреждения</b>\n"
+              "Настройки → Бюджеты: месячный лимит на категорию. Бот напишет, когда лимит или кредитный лимит "
+              "карты дойдёт до 80% и 100% (по одному разу за период).\n\n"
               "<b>🤖 AI-ввод</b>\n"
               "Без меню: отправьте фото чека, банковское SMS или просто текст "
               "(например «такси 25000 uob», «кофе 18 тысяч наличными»). Бот покажет черновик — проверьте, "
@@ -108,9 +117,14 @@ TEXTS = {
               "➖ Expense / ➕ Income — record an operation (a purchase can be paid from several accounts)\n"
               "🔁 Transfer — move money between your own accounts, repay a credit card\n"
               "💳 Accounts — accounts, credit limit and debt; add, edit, deactivate\n"
-              "📊 Report — income and expenses for the financial month (transfers are not counted)\n"
+              "📊 Report — the financial month: income, expenses, a chart by category and a comparison with "
+              "the previous period; tap a category for subcategories; ◀ ▶ for other periods "
+              "(transfers are not counted)\n"
               "🧾 History — recent operations; open one to edit or delete it\n"
-              "⚙️ Settings — accounts and language\n\n"
+              "⚙️ Settings — accounts, budgets and language\n\n"
+              "<b>🎯 Budgets and alerts</b>\n"
+              "Settings → Budgets: a monthly limit per category. The bot messages you when a budget or a credit "
+              "card limit reaches 80% and 100% (once per period each).\n\n"
               "<b>🤖 AI input</b>\n"
               "Skip the menus: send a receipt photo, a bank SMS or plain text "
               "(e.g. \"taxi 25000 from uob\", \"got salary 12m to hamkorbank\"). The bot shows a draft — "
@@ -233,16 +247,6 @@ TEXTS = {
     },
 
     # ---- Report and history ----
-    "report_title": {
-        "uz": "<b>Hisobot: {start}-dan bugungacha</b>",
-        "ru": "<b>Отчёт с {start} по сегодня</b>",
-        "en": "<b>Report from {start} to today</b>",
-    },
-    "report_line": {
-        "uz": "{currency}: daromad {income} · xarajat {expense} · farq {net}",
-        "ru": "{currency}: доходы {income} · расходы {expense} · итог {net}",
-        "en": "{currency}: income {income} · expenses {expense} · net {net}",
-    },
     "report_empty": {
         "uz": "Bu davrda hali daromad yoki xarajat yo'q.",
         "ru": "За этот период пока нет доходов и расходов.",
@@ -599,5 +603,129 @@ TEXTS = {
         "uz": "Saqlab bo'lmadi: hisob topilmadi yoki valyuta mos emas. Hisobni qayta tanlang.",
         "ru": "Не удалось сохранить: счёт не найден или валюта не совпадает. Выберите счёт заново.",
         "en": "Could not save: the account was not found or its currency differs. Choose the account again.",
+    },
+
+    # ---- Category report ----
+    "report_title_current": {
+        "uz": "<b>📊 Hisobot: {start} – bugun</b>",
+        "ru": "<b>📊 Отчёт: {start} – сегодня</b>",
+        "en": "<b>📊 Report: {start} – today</b>",
+    },
+    "report_title_past": {
+        "uz": "<b>📊 Hisobot: {start} – {end}</b>",
+        "ru": "<b>📊 Отчёт: {start} – {end}</b>",
+        "en": "<b>📊 Report: {start} – {end}</b>",
+    },
+    "report_totals": {
+        "uz": "💰 Daromad: {income}\n💸 Xarajat: {expense}{change}\n⚖️ Balans: {balance}",
+        "ru": "💰 Доходы: {income}\n💸 Расходы: {expense}{change}\n⚖️ Баланс: {balance}",
+        "en": "💰 Income: {income}\n💸 Expenses: {expense}{change}\n⚖️ Balance: {balance}",
+    },
+    "report_by_category": {
+        "uz": "<i>Kategoriyalar bo'yicha xarajatlar:</i>",
+        "ru": "<i>Расходы по категориям:</i>",
+        "en": "<i>Expenses by category:</i>",
+    },
+    "report_new": {"uz": "yangi", "ru": "новое", "en": "new"},
+    "report_compare_same_days": {
+        "uz": "ℹ️ O'zgarish oldingi davrning shu kunlari bilan ({start} – {end}) solishtirilgan.",
+        "ru": "ℹ️ Изменение — по сравнению с теми же днями прошлого периода ({start} – {end}).",
+        "en": "ℹ️ Change is compared with the same days of the previous period ({start} – {end}).",
+    },
+    "report_compare_full": {
+        "uz": "ℹ️ O'zgarish oldingi davr bilan ({start} – {end}) solishtirilgan.",
+        "ru": "ℹ️ Изменение — по сравнению с прошлым периодом ({start} – {end}).",
+        "en": "ℹ️ Change is compared with the previous period ({start} – {end}).",
+    },
+    "report_combined_head": {
+        "uz": "<b>Jami, UZS da</b> (taxminan, kurs: 1 USD = {rate} UZS)",
+        "ru": "<b>Всего в UZS</b> (приблизительно, курс: 1 USD = {rate} UZS)",
+        "en": "<b>Total in UZS</b> (approximate, rate: 1 USD = {rate} UZS)",
+    },
+    "report_budgets_head": {"uz": "<b>🎯 Byudjetlar</b>", "ru": "<b>🎯 Бюджеты</b>", "en": "<b>🎯 Budgets</b>"},
+    "report_budget_line": {
+        "uz": "{category}: {spent} / {limit} — {percent}%\n{bar}",
+        "ru": "{category}: {spent} / {limit} — {percent}%\n{bar}",
+        "en": "{category}: {spent} / {limit} — {percent}%\n{bar}",
+    },
+    "report_tap_category": {
+        "uz": "Subkategoriyalarni ko'rish uchun kategoriyani bosing.",
+        "ru": "Нажмите на категорию, чтобы увидеть подкатегории.",
+        "en": "Tap a category to see its subcategories.",
+    },
+    "report_sub_title": {
+        "uz": "<b>📊 {category}</b> · {start} – {end}",
+        "ru": "<b>📊 {category}</b> · {start} – {end}",
+        "en": "<b>📊 {category}</b> · {start} – {end}",
+    },
+    "report_sub_empty": {
+        "uz": "Bu davrda bu kategoriya bo'yicha xarajat yo'q.",
+        "ru": "В этом периоде нет расходов по этой категории.",
+        "en": "No expenses in this category in this period.",
+    },
+    "report_no_sub": {"uz": "subkategoriyasiz", "ru": "без подкатегории", "en": "no subcategory"},
+    "report_chart_title": {
+        "uz": "Kategoriyalar bo'yicha xarajatlar, {currency}",
+        "ru": "Расходы по категориям, {currency}",
+        "en": "Expenses by category, {currency}",
+    },
+    "report_chart_other": {"uz": "Boshqa", "ru": "Другое", "en": "Other"},
+
+    # ---- Budgets ----
+    "btn_budgets": {"uz": "🎯 Byudjetlar", "ru": "🎯 Бюджеты", "en": "🎯 Budgets"},
+    "btn_set_budget": {"uz": "✏️ Limitni belgilash", "ru": "✏️ Задать лимит", "en": "✏️ Set limit"},
+    "btn_remove_budget": {"uz": "🗑 Limitni o'chirish", "ru": "🗑 Убрать лимит", "en": "🗑 Remove limit"},
+    "budgets_title": {
+        "uz": "<b>🎯 Byudjetlar</b>\nHar bir xarajat kategoriyasi uchun moliyaviy oy limitini belgilang. "
+              "Limitning 80% va 100% ga yetganda ogohlantiraman.",
+        "ru": "<b>🎯 Бюджеты</b>\nЗадайте лимит на финансовый месяц для каждой категории расходов. "
+              "Я предупрежу, когда он дойдёт до 80% и 100%.",
+        "en": "<b>🎯 Budgets</b>\nSet a limit per expense category for the financial month. "
+              "I will warn you when it reaches 80% and 100%.",
+    },
+    "budget_button": {"uz": "{category} — {limit}", "ru": "{category} — {limit}", "en": "{category} — {limit}"},
+    "budget_not_set": {"uz": "belgilanmagan", "ru": "не задан", "en": "not set"},
+    "budget_details": {
+        "uz": "<b>{category}</b>\nLimit: {limit} (oyiga)\nSarflandi: {spent} — {percent}%\n{bar}",
+        "ru": "<b>{category}</b>\nЛимит: {limit} (в месяц)\nПотрачено: {spent} — {percent}%\n{bar}",
+        "en": "<b>{category}</b>\nLimit: {limit} (per month)\nSpent: {spent} — {percent}%\n{bar}",
+    },
+    "budget_details_none": {
+        "uz": "<b>{category}</b>\nBu kategoriya uchun limit belgilanmagan.",
+        "ru": "<b>{category}</b>\nДля этой категории лимит не задан.",
+        "en": "<b>{category}</b>\nNo limit is set for this category.",
+    },
+    "budget_ask_currency": {
+        "uz": "«{category}» limiti qaysi valyutada?", "ru": "В какой валюте лимит для «{category}»?",
+        "en": "Which currency is the limit for \"{category}\" in?",
+    },
+    "budget_ask_amount": {
+        "uz": "«{category}» uchun oylik limitni kiriting ({currency}). Masalan: 2000000",
+        "ru": "Введите месячный лимит для «{category}» ({currency}). Например: 2000000",
+        "en": "Enter the monthly limit for \"{category}\" ({currency}). Example: 2000000",
+    },
+    "budget_saved": {"uz": "Limit saqlandi.", "ru": "Лимит сохранён.", "en": "Limit saved."},
+    "budget_removed": {"uz": "Limit o'chirildi.", "ru": "Лимит удалён.", "en": "Limit removed."},
+
+    # ---- Limit alerts ----
+    "alert_budget_80": {
+        "uz": "⚠️ «{name}» byudjetining {percent}% i ishlatildi: {used} / {limit}.\n{bar}",
+        "ru": "⚠️ Бюджет «{name}» использован на {percent}%: {used} / {limit}.\n{bar}",
+        "en": "⚠️ Budget \"{name}\" is {percent}% used: {used} / {limit}.\n{bar}",
+    },
+    "alert_budget_100": {
+        "uz": "🚨 «{name}» byudjeti tugadi: {used} / {limit} ({percent}%).\n{bar}",
+        "ru": "🚨 Бюджет «{name}» исчерпан: {used} / {limit} ({percent}%).\n{bar}",
+        "en": "🚨 Budget \"{name}\" is used up: {used} / {limit} ({percent}%).\n{bar}",
+    },
+    "alert_credit_80": {
+        "uz": "⚠️ «{name}» kredit limitining {percent}% i ishlatildi: qarz {used} / {limit}.\n{bar}",
+        "ru": "⚠️ Кредитный лимит «{name}» использован на {percent}%: долг {used} / {limit}.\n{bar}",
+        "en": "⚠️ Credit limit of \"{name}\" is {percent}% used: debt {used} / {limit}.\n{bar}",
+    },
+    "alert_credit_100": {
+        "uz": "🚨 «{name}» kredit limiti to'ldi: qarz {used} / {limit} ({percent}%).\n{bar}",
+        "ru": "🚨 Кредитный лимит «{name}» исчерпан: долг {used} / {limit} ({percent}%).\n{bar}",
+        "en": "🚨 Credit limit of \"{name}\" is reached: debt {used} / {limit} ({percent}%).\n{bar}",
     },
 }

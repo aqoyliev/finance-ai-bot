@@ -4,6 +4,8 @@ from . import settings
 from . import finance
 from . import transfer
 from . import accounts
+from . import reports
+from . import budgets
 from . import operations
 from . import ai_input  # free text / media -> AI drafts; must stay before echo
 from . import echo

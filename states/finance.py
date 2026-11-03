@@ -30,3 +30,7 @@ class AIDraft(StatesGroup):
     review = State()  # AI drafts are shown; free text / media starts a new analysis
     amount = State()  # typing a corrected amount for the current draft
     date = State()  # typing a corrected date for the current draft
+
+
+class BudgetForm(StatesGroup):
+    amount = State()  # typing the monthly limit of a category

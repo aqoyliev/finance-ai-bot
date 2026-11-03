@@ -78,6 +78,7 @@ def split_or_finish(lang: str) -> InlineKeyboardMarkup:
 def settings(lang: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(t("btn_accounts", lang), callback_data="menu:accounts")],
+        [InlineKeyboardButton(t("btn_budgets", lang), callback_data="bud:list")],
         [InlineKeyboardButton(t("btn_language", lang), callback_data="set:lang")],
         [back_button(lang)],
     ])

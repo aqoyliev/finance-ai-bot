@@ -11,7 +11,8 @@ from states.finance import FinanceForm
 from utils.db_api import finance as db
 from utils.i18n import t
 from utils.misc.money import money_text, parse_amount
-from utils.misc.texts import balance_line, operation_line, over_limit_warning
+from utils.misc.texts import operation_line, over_limit_warning
+from utils.notify_alerts import send_alerts
 
 Choice = namedtuple("Choice", "id name")  # item shape expected by kb.choices
 
@@ -148,6 +149,7 @@ async def choose_account(call: types.CallbackQuery, state: FSMContext, lang: str
         await state.finish()
         text = t("income_saved", lang, amount=money_text(amount, currency), category=data.get("category"))
         await call.message.edit_text("\n\n".join([text] + warnings), reply_markup=kb.main_menu(lang))
+    await send_alerts(call.from_user.id, lang, saved)
 
 
 @dp.callback_query_handler(Text(equals="split:more"), state="*")
@@ -173,30 +175,7 @@ async def cancel(call: types.CallbackQuery, state: FSMContext, lang: str):
     await call.message.edit_text(t("cancelled", lang), reply_markup=kb.main_menu(lang))
 
 
-# ---- Report and history ----
-
-@dp.callback_query_handler(Text(equals="menu:report"), state="*")
-async def show_report(call: types.CallbackQuery, state: FSMContext, lang: str):
-    await call.answer()
-    await state.finish()
-    report = await db.build_report(call.from_user.id)
-
-    lines = [t("report_title", lang, start=report.start.strftime("%d.%m.%Y")), ""]
-    for currency in db.CURRENCIES:
-        income = report.totals.get(("income", currency), 0)
-        expense = report.totals.get(("expense", currency), 0)
-        if income or expense:
-            lines.append(t("report_line", lang, currency=currency, income=money_text(income, currency),
-                           expense=money_text(expense, currency), net=money_text(income - expense, currency)))
-    if len(lines) == 2:
-        lines.append(t("report_empty", lang))
-    lines += ["", t("balances", lang)] + [balance_line(a, lang) for a in report.accounts]
-    if report.usd_rate:
-        lines += ["", t("current_rate", lang, rate=report.usd_rate)]
-    else:
-        lines += ["", t("rate_hint", lang)]
-    await call.message.edit_text("\n".join(lines), reply_markup=kb.main_menu(lang))
-
+# ---- History ----
 
 @dp.callback_query_handler(Text(equals="menu:history"), state="*")
 async def show_history(call: types.CallbackQuery, state: FSMContext, lang: str):

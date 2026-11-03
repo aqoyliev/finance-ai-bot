@@ -9,6 +9,7 @@ from utils.db_api import finance as db
 from utils.i18n import t
 from utils.misc.money import money_text, parse_amount
 from utils.misc.texts import balance_line
+from utils.notify_alerts import send_alerts
 
 from .finance import Choice, session_lost
 
@@ -73,6 +74,7 @@ async def save_transfer(message: types.Message, state: FSMContext, lang: str, am
     text = t(key, lang, amount=money_text(amount, source.currency), source=source.name, target=target.name)
     lines = [text, "", t("balances", lang), balance_line(source, lang), balance_line(target, lang)]
     await send("\n".join(lines), reply_markup=kb.main_menu(lang))
+    await send_alerts(user_id, lang, saved)
 
 
 @dp.callback_query_handler(Text(startswith="quick:"), state=TransferForm.amount)

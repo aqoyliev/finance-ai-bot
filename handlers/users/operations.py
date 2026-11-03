@@ -11,6 +11,7 @@ from utils.db_api import finance as db
 from utils.i18n import t
 from utils.misc.money import parse_amount
 from utils.misc.texts import balance_line, operation_details, over_limit_warning
+from utils.notify_alerts import send_alerts
 
 from .finance import Choice, session_lost
 
@@ -82,6 +83,7 @@ async def new_amount(message: types.Message, state: FSMContext, lang: str):
         return
     view = await db.get_operation(message.from_user.id, tx_id)
     await render_operation(message, view, lang, edit=False, notice=saved_notice(saved, lang))
+    await send_alerts(message.from_user.id, lang, saved)
 
 
 # ---- Category / subcategory ----
@@ -103,12 +105,13 @@ async def apply_category(call: types.CallbackQuery, state: FSMContext, lang: str
     data = await state.get_data()
     await state.finish()
     try:
-        await db.update_category(call.from_user.id, data.get("edit_tx"), data.get("edit_category"), subcategory)
+        tx = await db.update_category(call.from_user.id, data.get("edit_tx"), data.get("edit_category"), subcategory)
         view = await db.get_operation(call.from_user.id, data.get("edit_tx"))
     except db.FinanceError:
         await not_found(call, state, lang)
         return
     await render_operation(call.message, view, lang, notice=t("operation_updated", lang))
+    await send_alerts(call.from_user.id, lang, db.SavedOperation(tx.group_id, [tx]))
 
 
 @dp.callback_query_handler(Text(startswith="opcat:"), state="*")
@@ -171,6 +174,7 @@ async def new_account(call: types.CallbackQuery, state: FSMContext, lang: str):
         await not_found(call, state, lang)
         return
     await render_operation(call.message, view, lang, notice=saved_notice(saved, lang))
+    await send_alerts(call.from_user.id, lang, saved)
 
 
 # ---- Delete ----

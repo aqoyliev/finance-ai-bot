@@ -6,6 +6,7 @@ sqlalchemy[asyncio]~=2.0
 aiosqlite~=0.20
 alembic~=1.13
 anthropic~=2.4
+matplotlib~=3.11
 pydantic~=2.7
 fastapi~=0.111
 uvicorn[standard]~=0.29

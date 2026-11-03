@@ -11,6 +11,7 @@ sqlalchemy = {extras = ["asyncio"], version = "~=2.0"}
 aiosqlite = "~=0.20"
 alembic = "~=1.13"
 anthropic = "~=2.4"
+matplotlib = "~=3.11"
 pydantic = "~=2.7"
 fastapi = "~=0.111"
 uvicorn = {extras = ["standard"], version = "~=0.29"}

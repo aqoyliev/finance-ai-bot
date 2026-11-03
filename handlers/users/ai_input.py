@@ -23,6 +23,7 @@ from utils.db_api import finance as db
 from utils.i18n import TEXTS, t
 from utils.misc.money import money_text, parse_amount
 from utils.misc.texts import balance_line, over_limit_warning
+from utils.notify_alerts import send_alerts
 
 from .finance import Choice
 
@@ -238,15 +239,22 @@ def saved_summary(draft: Draft, saved: db.SavedOperation, lang: str) -> str:
     return "\n".join(lines + over_limit_warning(saved.over_limit, lang))
 
 
-async def next_or_finish(call: types.CallbackQuery, state: FSMContext, lang: str, result: str):
-    """Drop the current draft, then show the next one (as a new message) or finish."""
+async def next_or_finish(call: types.CallbackQuery, state: FSMContext, lang: str, result: str,
+                         saved: Optional[db.SavedOperation] = None):
+    """Drop the current draft, then show the next one (as a new message) or finish.
+
+    Limit alerts for a just saved operation go out before the next draft is shown."""
     drafts = (await load_drafts(state))[1:]
     if not drafts:
         await state.finish()
         await call.message.edit_text(result, reply_markup=kb.main_menu(lang))
+        if saved:
+            await send_alerts(call.from_user.id, lang, saved)
         return
     await store_drafts(state, drafts)
     await call.message.edit_text(result)
+    if saved:
+        await send_alerts(call.from_user.id, lang, saved)
     await render(call.message, state, lang, call.from_user.id, edit=False)
 
 
@@ -268,7 +276,7 @@ async def save(call: types.CallbackQuery, state: FSMContext, lang: str):
         await call.message.answer(t("ai_save_failed", lang))
         await render(call.message, state, lang, call.from_user.id, edit=False)
         return
-    await next_or_finish(call, state, lang, saved_summary(draft, saved, lang))
+    await next_or_finish(call, state, lang, saved_summary(draft, saved, lang), saved)
 
 
 @dp.callback_query_handler(Text(equals="ai:saveall"), state=AIDraft.states)
@@ -278,21 +286,26 @@ async def save_all(call: types.CallbackQuery, state: FSMContext, lang: str):
     if not drafts:
         await lost(call, state, lang)
         return
-    results, remaining = [], []
+    results, remaining, saved_ops = [], [], []
     for draft in drafts:
         try:
             if parser.missing_fields(draft):
                 raise db.InvalidValue()
-            results.append(saved_summary(draft, await parser.save_draft(call.from_user.id, draft), lang))
+            saved = await parser.save_draft(call.from_user.id, draft)
         except db.FinanceError:
             remaining.append(draft)
+            continue
+        saved_ops.append(saved)
+        results.append(saved_summary(draft, saved, lang))
     if not remaining:
         await state.finish()
         await call.message.edit_text("\n\n".join(results), reply_markup=kb.main_menu(lang))
+        await send_alerts(call.from_user.id, lang, *saved_ops)
         return
     await state.update_data(ai_total=len(remaining))
     await store_drafts(state, remaining)
     await call.message.edit_text("\n\n".join(results + [t("ai_save_failed", lang)]))
+    await send_alerts(call.from_user.id, lang, *saved_ops)
     await render(call.message, state, lang, call.from_user.id, edit=False)
 
 

@@ -9,6 +9,15 @@ def money_text(minor: int, currency: str) -> str:
     return f"{amount:,.2f} {currency}".replace(",", " ")
 
 
+def short_money(minor: int) -> str:
+    """Compact amount for chart labels: 1 250 000 -> '1.25M'."""
+    value = Decimal(minor) / Decimal(100)
+    for limit, suffix in ((Decimal(10) ** 9, "B"), (Decimal(10) ** 6, "M"), (Decimal(10) ** 3, "K")):
+        if abs(value) >= limit:
+            return f"{(value / limit):.2f}".rstrip("0").rstrip(".") + suffix
+    return f"{value:.0f}"
+
+
 def parse_amount(text: str, allow_zero: bool = False) -> Optional[int]:
     """Parse user input like '12 500,50' into minor units. Returns None if invalid."""
     try:

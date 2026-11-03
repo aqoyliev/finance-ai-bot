@@ -35,12 +35,54 @@ A private personal-finance bot for a single owner, built on this template.
 - ⚠️ Warning when an expense pushes a credit card's debt above its limit
 - 🧾 History: open a recent operation to change its amount, category or account, or delete it
   (balances are recalculated; deleting a transfer removes both legs)
-- 📊 Report for the current financial month (it starts on the salary day, `/salaryday 5`)
+- 📊 Report for the financial month (it starts on the salary day, `/salaryday 5`): income, expenses and balance per
+  currency, expenses by category with share and change versus the previous period, a donut chart (see below)
+- 🎯 Monthly budgets per expense category and 🔔 alerts at 80% / 100% of a budget or of a credit card limit
 - 🤖 AI input: record operations without menus from a receipt photo, a forwarded bank SMS
   or free text (see below)
 
 All texts live in `utils/i18n.py`; operations are written through `record_operation` / `record_transfer`
 in `utils/db_api/operations.py`.
+
+### Category report and chart
+
+📊 REPORT shows the current financial period as a chart (photo) with the text summary as its caption; when the text
+does not fit Telegram's 1024-character caption limit it is sent as a separate message right after the photo.
+
+- Per currency: income, expenses, balance (transfers are never counted), then expenses by category, biggest first,
+  with the share of the total and the change versus the previous period. USD and UZS are shown separately; if a
+  rate is set (`/rate 1 USD 12700 UZS`) an approximate combined total in UZS is added and the chart sums both in UZS.
+- **Comparison rule:** while the period is still running it is compared with the *same number of days* from the
+  start of the previous period (day 10 of this month vs days 1-10 of the last one); a finished period is
+  compared with the whole previous one. The note under the report shows the compared dates.
+- Tap a category for its subcategory breakdown; ◀ / ▶ move to the previous / next period (never into the future);
+  the account balances are on 💳 ACCOUNTS.
+- The chart is a donut for up to 8 categories (tiny slices merged into "Other"), horizontal bars for more (top 9 +
+  "Other"). It is drawn by matplotlib (Agg backend, DejaVu Sans font, so Cyrillic and Uzbek letters render; emoji in
+  category names are dropped from the chart labels) in a worker thread. If drawing fails, or there are no
+  expenses, the report is sent as text only. With expenses in both currencies and no rate, only the first
+  currency (UZS) is charted.
+
+### Budgets and alerts
+
+Settings → 🎯 Budgets: pick an expense category, then set, change or remove its monthly limit (UZS or USD; the month
+is the financial period). The report shows `spent / limit`, the percentage and a progress bar for every budget.
+Spending in the other currency counts towards a budget when a USD rate is set.
+
+After an expense is saved (manually or from an AI draft), edited (amount, category or account) or after a
+transfer touches a credit card, the bot checks the budgets of the affected categories and the affected credit cards
+and sends **one message per threshold (80% and 100%) per period** for each category / card:
+
+- sent alerts are stored in `alerts_sent` keyed by the period start, so every new period starts clean;
+- deleting or lowering an expense does not "unsend" anything, and crossing a threshold again within the same
+  period is not announced again;
+- one change that jumps over both thresholds produces only the 100% alert;
+- changing or removing a budget limit clears that category's alerts for a fresh start;
+- the existing "debt above the limit" warning in the save confirmation stays; its card does not get a second
+  100% message for the same save.
+
+Checks run in one service, `db.check_alerts` (`utils/db_api/alerts.py`), called through
+`utils/notify_alerts.send_alerts` from the handlers that save or edit operations.
 
 ### AI input (Anthropic Claude)
 
@@ -131,7 +173,7 @@ The Claude client is mocked, so no API key is needed and no requests are sent.
 ├── data/
 │   └── config.py          # Reads settings from .env
 ├── handlers/
-│   ├── users/             # start, help, menus, ai_input (AI drafts), echo fallback
+│   ├── users/             # start, help, menus, reports, budgets, ai_input (AI drafts), echo fallback
 │   ├── groups/            # group chat handlers
 │   ├── channels/          # channel post handlers
 │   └── errors/            # global error handler
@@ -142,12 +184,14 @@ The Claude client is mocked, so no API key is needed and no requests are sent.
 ├── states/                # FSM states
 ├── filters/               # custom filters
 ├── migrations/            # alembic migrations
-├── tests/                 # pytest suite (service layer, AI parsing with a mocked Claude client)
+├── tests/                 # pytest suite (service layer, reports / alerts / charts, AI parsing with a mocked Claude client)
 └── utils/
     ├── ai/                # Claude client + prompt/schema (claude.py), validation (parser.py)
-    ├── db_api/            # database helpers
+    ├── charts.py          # matplotlib expense chart (PNG bytes)
+    ├── db_api/            # database helpers (reports, budgets, alerts, operations, ...)
     ├── misc/              # logging, throttling decorator
     ├── notify_admins.py   # start-up notification
+    ├── notify_alerts.py   # sends limit alerts after operations are saved / edited
     └── set_bot_commands.py
 ```
 

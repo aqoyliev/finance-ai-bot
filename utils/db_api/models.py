@@ -1,7 +1,7 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Optional
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import BigInteger, Date, DateTime, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base
@@ -87,3 +87,31 @@ class ExchangeRate(Base):
     to_currency: Mapped[str] = mapped_column(String(3), primary_key=True)
     rate: Mapped[str] = mapped_column(String)  # Decimal as string
     updated_at: Mapped[datetime] = mapped_column(DateTime)
+
+
+class Budget(Base):
+    """Monthly spending limit of one expense category (the month starts on the user's salary day)."""
+    __tablename__ = "budgets"
+    __table_args__ = (UniqueConstraint("user_id", "category"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    category: Mapped[str] = mapped_column(String)  # category name, as stored in Transaction.category
+    currency: Mapped[str] = mapped_column(String(3))
+    amount_minor: Mapped[int] = mapped_column(BigInteger)
+    created_at: Mapped[datetime] = mapped_column(DateTime)
+    updated_at: Mapped[datetime] = mapped_column(DateTime)
+
+
+class AlertSent(Base):
+    """A limit alert that was already sent: at most one row per user, subject, threshold and period."""
+    __tablename__ = "alerts_sent"
+    __table_args__ = (UniqueConstraint("user_id", "kind", "ref", "threshold", "period_start"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    kind: Mapped[str] = mapped_column(String)  # budget | credit
+    ref: Mapped[str] = mapped_column(String)  # category name (budget) or account id (credit)
+    threshold: Mapped[int] = mapped_column(Integer)  # percent: 80 | 100
+    period_start: Mapped[date] = mapped_column(Date)  # start of the financial period the alert belongs to
+    sent_at: Mapped[datetime] = mapped_column(DateTime)
