@@ -27,7 +27,8 @@ from aiogram.utils.exceptions import TelegramAPIError
 from keyboards.inline import ai as ai_kb
 from loader import bot
 from utils import cards
-from utils.ai import assistant, claude
+from utils.ai import assistant
+from utils.ai import core as ai
 from utils.db_api import finance as db
 from utils.i18n import t
 
@@ -107,7 +108,7 @@ class AdviceScheduler:
         """One check of every user. Returns [(user_id, kind)] actually sent."""
         now = now or db.now()
         sent = []
-        if not claude.get_client().configured:
+        if not ai.get_client().configured:
             return sent
         async with self._lock:
             for user in await db.list_users():
@@ -120,7 +121,7 @@ class AdviceScheduler:
                         if await self.deliver(user, kind, day):
                             sent.append((user.id, kind))
                         self._failures.pop(key, None)
-                    except (claude.AIError, TelegramAPIError) as err:
+                    except (ai.AIError, TelegramAPIError) as err:
                         log.warning("%s advice for %s failed (attempt %d): %s", kind, user.id, attempts + 1, err)
                         self._failures[key] = (attempts + 1, now + RETRY_AFTER)
                     except Exception:  # noqa: BLE001 - one user's failure must not stop the loop

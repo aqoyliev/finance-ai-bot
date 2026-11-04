@@ -1,4 +1,4 @@
-"""AI input: receipt photos, bank SMS and free text -> draft operations -> confirm -> save.
+"""AI input: receipt photos, PDFs, voice messages, bank SMS and free text -> draft operations -> confirm -> save.
 
 Drafts live in FSM data ("ai_drafts", the current one first) while the state is AIDraft.*.
 Manual flows are unaffected: their FSM states are handled by their own handlers, and this module only
@@ -6,6 +6,9 @@ reacts to plain text when no state (or AIDraft.review) is set. It is registered 
 
 The extraction model also classifies free text: a question about the user's finances is handed to Ask AI
 (handlers/users/ask_ai.py) instead of becoming a draft. Photos and files always go to extraction.
+
+Voice messages and audio files need audio input, which only the Gemini provider has: the audio is transcribed
+and extracted in one call into the same draft flow. With AI_PROVIDER=claude they get a localized hint.
 """
 import logging
 from typing import List, Optional
@@ -18,7 +21,8 @@ from keyboards.inline import ai as ai_kb
 from keyboards.inline import finance as kb
 from loader import bot, dp
 from states.finance import AIDraft, AskAI
-from utils.ai import claude, parser
+from utils.ai import core as ai
+from utils.ai import parser
 from utils.ai.parser import Draft
 from utils.db_api import finance as db
 from utils.i18n import t
@@ -32,7 +36,6 @@ from .finance import Choice
 
 log = logging.getLogger(__name__)
 
-DOCUMENT_TYPES = claude.IMAGE_TYPES + (claude.PDF_TYPE,)  # what Claude can read (no HEIC)
 INPUT_STATES = [None, AIDraft.review]  # states in which a new input starts an analysis
 MEDIA_STATES = INPUT_STATES + [AskAI.question]  # a receipt sent in Ask AI mode is still recorded
 
@@ -129,10 +132,10 @@ async def lost(call: types.CallbackQuery, state: FSMContext, lang: str):
 # ---- Input: analysis ----
 
 async def analyze(message: types.Message, state: FSMContext, lang: str, text: Optional[str] = None,
-                  media: Optional[claude.Media] = None, source_ref: Optional[str] = None):
-    client = claude.get_client()
+                  media: Optional[ai.Media] = None, source_ref: Optional[str] = None):
+    client = ai.get_client()
     if not client.configured:
-        await message.answer(t("ai_not_configured", lang), reply_markup=kb.main_menu(lang))
+        await message.answer(error_text("not_configured", lang), reply_markup=kb.main_menu(lang))
         return
     status = await message.answer(t("ai_analyzing", lang))
     user_id = message.from_user.id
@@ -140,11 +143,11 @@ async def analyze(message: types.Message, state: FSMContext, lang: str, text: Op
     try:
         ctx = await parser.load_context(user_id)
         accounts, categories = ctx.as_prompt_data()
-        context = claude.build_context(accounts, categories, now.strftime("%Y-%m-%d %H:%M (%A)"),
+        context = ai.build_context(accounts, categories, now.strftime("%Y-%m-%d %H:%M (%A)"),
                                        conversation=await ask_ai.has_conversation(state))
         async with typing(message.chat.id):
-            raw = await claude.extract_operations(context, text, [media] if media else [], client=client)
-    except claude.AIError as err:
+            raw = await ai.extract_operations(context, text, [media] if media else [], client=client)
+    except ai.AIError as err:
         log.info("AI input failed: %s", err)
         await status.edit_text(error_text(err.code, lang), reply_markup=kb.main_menu(lang))
         return
@@ -179,26 +182,56 @@ async def photo_input(message: types.Message, state: FSMContext, lang: str):
 async def document_input(message: types.Message, state: FSMContext, lang: str):
     document = message.document
     mime = (document.mime_type or "").lower()
-    if mime not in DOCUMENT_TYPES:
+    if ai.audio_mime(mime):  # an audio file sent as a document
+        await audio_input(message, state, lang, document, mime)
+        return
+    if not ai.get_client().accepts(mime):
         await message.answer(t("ai_unsupported_file", lang))
         return
     await analyze_file(message, state, lang, document.file_id, document.file_unique_id, mime,
                        size=document.file_size)
 
 
-@dp.message_handler(state=MEDIA_STATES, content_types=[types.ContentType.VOICE, types.ContentType.AUDIO,
-                                                     types.ContentType.VIDEO_NOTE])
+@dp.message_handler(state=MEDIA_STATES, content_types=[types.ContentType.VOICE, types.ContentType.AUDIO])
 async def voice_input(message: types.Message, state: FSMContext, lang: str):
-    # Claude has no audio input
-    await message.answer(t("ai_voice_unsupported", lang))
+    audio = message.voice or message.audio
+    await audio_input(message, state, lang, audio, audio.mime_type or "audio/ogg")  # voice notes are OGG/Opus
+
+
+@dp.message_handler(state=MEDIA_STATES, content_types=types.ContentTypes.VIDEO_NOTE)
+async def video_note_input(message: types.Message, state: FSMContext, lang: str):
+    await message.answer(t("ai_video_note_unsupported", lang))
+
+
+async def audio_input(message: types.Message, state: FSMContext, lang: str, audio, mime: str):
+    """Voice/audio -> Gemini audio input (transcribe + extract in one call), within the size/duration limits."""
+    client = ai.get_client()
+    if not client.configured:
+        await message.answer(error_text("not_configured", lang), reply_markup=kb.main_menu(lang))
+        return
+    if not client.supports_audio:
+        await message.answer(t("ai_voice_needs_gemini", lang))
+        return
+    mime = ai.audio_mime(mime)
+    if mime is None:
+        await message.answer(t("ai_unsupported_file", lang))
+        return
+    duration = getattr(audio, "duration", None) or 0
+    size = getattr(audio, "file_size", None) or 0
+    if duration > ai.MAX_AUDIO_SECONDS or size > client.media_limit(mime):
+        await message.answer(t("ai_voice_too_long", lang, minutes=ai.MAX_AUDIO_SECONDS // 60,
+                               mb=ai.MAX_AUDIO_BYTES // (1024 * 1024)))
+        return
+    await analyze_file(message, state, lang, audio.file_id, audio.file_unique_id, mime, size=size)
 
 
 async def analyze_file(message: types.Message, state: FSMContext, lang: str, file_id: str, unique_id: str,
                        mime: str, size: Optional[int] = None):
-    if not claude.get_client().configured:
-        await message.answer(t("ai_not_configured", lang), reply_markup=kb.main_menu(lang))
+    client = ai.get_client()
+    if not client.configured:
+        await message.answer(error_text("not_configured", lang), reply_markup=kb.main_menu(lang))
         return
-    if size and size > claude.media_limit(mime):
+    if size and size > client.media_limit(mime):
         await message.answer(error_text("too_large", lang))
         return
     try:
@@ -208,7 +241,7 @@ async def analyze_file(message: types.Message, state: FSMContext, lang: str, fil
         await message.answer(error_text("unavailable", lang))
         return
     # A caption ("taxi, uob card") is passed along as a hint
-    await analyze(message, state, lang, text=message.caption, media=claude.Media(data, mime),
+    await analyze(message, state, lang, text=message.caption, media=ai.Media(data, mime),
                   source_ref=parser.fingerprint(f"file:{unique_id}"))
 
 

@@ -17,7 +17,8 @@ from keyboards.inline import ai as ai_kb
 from keyboards.inline import finance as kb
 from loader import dp
 from states.finance import AskAI
-from utils.ai import assistant, claude
+from utils.ai import assistant
+from utils.ai import core as ai
 from utils.db_api import finance as db
 from utils.i18n import t
 from utils.misc.texts import split_message
@@ -42,10 +43,10 @@ async def has_conversation(state: FSMContext) -> bool:
 async def answer(message: types.Message, state: FSMContext, lang: str, question: str,
                  status: Optional[types.Message] = None) -> None:
     """Answer one question (with the stored conversation) and reply in place of `status` if given."""
-    client = claude.get_client()
+    client = ai.get_client()
     markup = ai_kb.ask_answer(lang)
     if not client.configured:
-        await message.answer(t("ai_not_configured", lang), reply_markup=kb.main_menu(lang))
+        await message.answer(error_text("not_configured", lang), reply_markup=kb.main_menu(lang))
         return
     if status is None:
         status = await message.answer(t("ask_thinking", lang))
@@ -55,7 +56,7 @@ async def answer(message: types.Message, state: FSMContext, lang: str, question:
         async with typing(message.chat.id):
             result = await assistant.ask(message.from_user.id, question, lang, await stored_history(state),
                                          client=client)
-    except claude.AIError as err:
+    except ai.AIError as err:
         log.info("Ask AI failed: %s", err)
         await status.edit_text(error_text(err.code, lang, prefix="ask_error_"), reply_markup=markup)
         return

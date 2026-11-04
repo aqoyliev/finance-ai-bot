@@ -15,7 +15,8 @@ from keyboards.inline import ai as ai_kb
 from loader import dp
 from utils import cards
 from utils.advice_scheduler import advice_header, advice_message, send_advice
-from utils.ai import assistant, claude
+from utils.ai import assistant
+from utils.ai import core as ai
 from utils.db_api import finance as db
 from utils.i18n import t
 
@@ -55,15 +56,15 @@ async def toggle(call: types.CallbackQuery, lang: str):
 async def advice_now(call: types.CallbackQuery, lang: str):
     """Advice on the running period, sent as a new message (the screen it was asked from stays)."""
     await call.answer()
-    client = claude.get_client()
+    client = ai.get_client()
     if not client.configured:
-        await call.message.answer(t("ai_not_configured", lang))
+        await call.message.answer(error_text("not_configured", lang))
         return
     status = await call.message.answer(t("advice_preparing", lang))
     try:
         async with typing(call.message.chat.id):
             result = await assistant.advice(call.from_user.id, "now", lang, client=client)
-    except claude.AIError as err:
+    except ai.AIError as err:
         log.info("Advice failed: %s", err)
         await status.edit_text(error_text(err.code, lang, prefix="ask_error_"))
         return

@@ -7,6 +7,18 @@ from data import config
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 
+
+
+def _ensure_sqlite_dir(url: str) -> None:
+    """Create the parent folder of a file-based SQLite database (e.g. a freshly mounted /data volume)."""
+    from sqlalchemy.engine import make_url
+
+    parsed = make_url(url)
+    if parsed.get_backend_name() == "sqlite" and parsed.database and parsed.database != ":memory:":
+        Path(parsed.database).expanduser().resolve().parent.mkdir(parents=True, exist_ok=True)
+
+
+_ensure_sqlite_dir(config.DATABASE_URL)
 engine = create_async_engine(config.DATABASE_URL)
 session_factory = async_sessionmaker(engine, expire_on_commit=False)
 

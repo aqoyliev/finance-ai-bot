@@ -1,20 +1,21 @@
-"""Anthropic Claude client, prompts and the response schema for AI input.
+"""Anthropic Claude client (AI_PROVIDER=claude).
 
-ClaudeClient is generic: generate()/generate_json() run one request (text + optional image/PDF in, text or
-JSON out) and create_analysis() runs one raw request of the analysis model (the Q&A tool loop and the advice
-live in utils/ai/assistant.py). extract_operations() is the AI-input use case. Nothing here touches the
-database: the caller passes a plain-text description of the user's accounts and categories, and
-utils/ai/parser.py validates whatever comes back.
+ClaudeClient implements the provider interface described in utils/ai/core.py: generate()/generate_json() run
+one request (text + optional image/PDF in, text or JSON out) and analysis_step() runs one request of the
+analysis model (the Q&A tool loop and the advice live in utils/ai/assistant.py). The extraction prompt and
+schema are shared with Gemini and live in core.py; they are re-exported here for compatibility.
 
-Claude has no audio input, so voice messages are not supported.
+Claude has no audio input, so voice messages are not supported with this provider.
 """
 import base64
 import json
 import logging
-from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from data import config
+# Shared names re-exported for older imports (utils.ai.claude.AIError, extract_operations, ...)
+from .core import (EXTRACT_EFFORT, EXTRACTION_SYSTEM, INTENTS, IMAGE_TYPES, PDF_TYPE, AIError,  # noqa: F401
+                   Media, Step, ToolCall, _field, _schema, build_context, extract_operations, get_client,
+                   set_client)
 
 try:  # The bot must still start (manual menus only) if the SDK is not installed
     import anthropic
@@ -23,12 +24,9 @@ except ImportError:  # pragma: no cover
 
 log = logging.getLogger(__name__)
 
-IMAGE_TYPES = ("image/jpeg", "image/png", "image/gif", "image/webp")
-PDF_TYPE = "application/pdf"
 MAX_IMAGE_BYTES = 5 * 1024 * 1024  # the API rejects images over 5 MB
 MAX_MEDIA_BYTES = 15 * 1024 * 1024  # PDFs; the request limit is 32 MB and base64 adds a third
 MAX_TOKENS = 4000
-EXTRACT_EFFORT = "low"
 # Server-side refusal fallback for the analysis model: a policy decline is retried on the model Anthropic
 # recommends for that category, within the same request (beta; the "default" form needs exactly this header)
 FALLBACK_BETA = "server-side-fallback-2026-07-01"
@@ -40,22 +38,12 @@ def media_limit(mime_type: str) -> int:
     return MAX_IMAGE_BYTES if mime_type in IMAGE_TYPES else MAX_MEDIA_BYTES
 
 
-class AIError(Exception):
-    """A failed AI request. `code` maps to a localized message (ai_error_<code>)."""
-
-    def __init__(self, code: str, detail: str = ""):
-        super().__init__(f"{code}: {detail}" if detail else code)
-        # not_configured | timeout | quota | auth | bad_input | unavailable | bad_response | too_large | refused
-        self.code = code
-
-
-@dataclass
-class Media:
-    data: bytes
-    mime_type: str  # image/jpeg | image/png | image/gif | image/webp | application/pdf
-
-
 class ClaudeClient:
+    provider = "claude"
+    key_name = "ANTHROPIC_API_KEY"
+    supports_audio = False
+    document_types = IMAGE_TYPES + (PDF_TYPE,)  # no HEIC
+
     def __init__(self, api_key: str, extract_model: str, analysis_model: str = "", timeout: float = 60,
                  max_retries: int = 1, client: Any = None, analysis_timeout: float = 180,
                  fallbacks: bool = True):
@@ -71,6 +59,13 @@ class ClaudeClient:
     @property
     def configured(self) -> bool:
         return self._client is not None or (bool(self.api_key) and anthropic is not None)
+
+    def accepts(self, mime_type: str) -> bool:
+        return mime_type in self.document_types
+
+    @staticmethod
+    def media_limit(mime_type: str) -> int:
+        return media_limit(mime_type)
 
     def _sdk(self):
         if not self.configured:
@@ -192,6 +187,49 @@ class ClaudeClient:
         except Exception as err:  # SDK / network errors -> one of our codes
             raise self._map_error(err) from err
 
+    # ---- Conversation interface (see utils/ai/core.py) ----
+
+    @staticmethod
+    def user_message(text: str) -> Dict[str, Any]:
+        return {"role": "user", "content": [{"type": "text", "text": text}]}
+
+    @staticmethod
+    def owns_history(message: Any) -> bool:
+        return isinstance(message, dict) and "content" in message
+
+    async def analysis_step(self, messages: List[dict], *, system: str, effort: str, max_tokens: int,
+                            tools: Optional[List[dict]] = None, cache: bool = False) -> Step:
+        """One analysis request; refusal and truncation raise AIError (stop_reason is checked first)."""
+        request = self.build_analysis_request(messages, system=system, effort=effort, max_tokens=max_tokens,
+                                              tools=tools, cache=cache)
+        response = await self.create_analysis(request)
+        stop_reason = getattr(response, "stop_reason", None)
+        if stop_reason == "refusal":
+            raise AIError("refused")
+        if stop_reason == "max_tokens":
+            raise AIError("bad_response", "max_tokens")
+        message = {"role": "assistant", "content": assistant_content(response.content)}
+        if stop_reason == "pause_turn":  # server-side pause: send the turn back as is to continue
+            return Step("pause", message)
+        calls = [ToolCall(block.id, block.name, block.input) for block in response.content or []
+                 if getattr(block, "type", None) == "tool_use"]
+        return Step("tool_use" if stop_reason == "tool_use" and calls else "end", message,
+                    response_text(response), calls)
+
+    @staticmethod
+    def tool_results_message(results: Sequence[Tuple[ToolCall, str, bool]],
+                             note: Optional[str] = None) -> Dict[str, Any]:
+        """All tool_result blocks of a turn in one user message, then the optional note as a text block."""
+        content: List[Dict[str, Any]] = []
+        for call, output, is_error in results:
+            block = {"type": "tool_result", "tool_use_id": call.id, "content": output}
+            if is_error:
+                block["is_error"] = True
+            content.append(block)
+        if note:
+            content.append({"type": "text", "text": note})
+        return {"role": "user", "content": content}
+
     @staticmethod
     def _map_error(err: Exception) -> AIError:
         if isinstance(err, AIError):
@@ -256,143 +294,3 @@ def assistant_content(content: Sequence[Any]) -> List[Dict[str, Any]]:
         if param is not None:
             params.append(param)
     return params
-
-
-_default_client: Optional[ClaudeClient] = None
-
-
-def get_client() -> ClaudeClient:
-    """Shared client built from data/config.py (ANTHROPIC_API_KEY, CLAUDE_*_MODEL, CLAUDE_TIMEOUT)."""
-    global _default_client
-    if _default_client is None:
-        _default_client = ClaudeClient(config.ANTHROPIC_API_KEY, config.CLAUDE_EXTRACT_MODEL,
-                                       config.CLAUDE_ANALYSIS_MODEL, config.CLAUDE_TIMEOUT,
-                                       analysis_timeout=config.CLAUDE_ANALYSIS_TIMEOUT,
-                                       fallbacks=config.CLAUDE_REFUSAL_FALLBACK)
-    return _default_client
-
-
-def set_client(client: Optional[ClaudeClient]) -> None:
-    """Replace the shared client (tests, end-to-end checks)."""
-    global _default_client
-    _default_client = client
-
-
-# ---- Operation extraction ----
-
-def _field(schema: dict, description: str, nullable: bool = True) -> dict:
-    """A described property; nullable ones become anyOf [schema, null] (structured outputs have no `nullable`)."""
-    return {"anyOf": [schema, {"type": "null"}], "description": description} if nullable \
-        else {**schema, "description": description}
-
-
-INTENTS = ("operation", "question", "other")
-
-
-def _schema() -> dict:
-    """JSON Schema for structured outputs: a list of draft operations. Missing values are null, never guessed.
-
-    Structured outputs need additionalProperties=false, every property listed in `required` and no
-    numeric bounds, so optional values are expressed as anyOf [X, null].
-    """
-    string = {"type": "string"}
-    properties = {
-        "kind": _field({"type": "string", "enum": ["expense", "income", "transfer"]},
-                       "expense = money spent, income = money received, "
-                       "transfer = between two of the user's own accounts", nullable=False),
-        "amount": _field(string, "Total amount as a plain decimal: digits and an optional dot for decimals, "
-                                 "no spaces or thousands separators, e.g. '125000.00'", nullable=False),
-        "currency": _field({"type": "string", "enum": ["UZS", "USD"]}, "Currency code"),
-        "category": _field(string, "Exact name of one of the user's categories for this kind"),
-        "subcategory": _field(string, "Exact name of a subcategory of the chosen category"),
-        "account_id": _field({"type": "integer"}, "id of the user's account the money left (or, for income, "
-                                                  "arrived to); for a transfer the source account"),
-        "to_account_id": _field({"type": "integer"}, "Transfer only: id of the receiving account"),
-        "card_last4": _field(string, "Last 4 digits of the card if shown (e.g. from '*1234')"),
-        "account_hint": _field(string, "Account/bank/payment method as written in the input"),
-        "note": _field(string, "Short merchant or description, max ~80 characters"),
-        "occurred_at": _field(string, "Date/time printed on the receipt or SMS, 'YYYY-MM-DD HH:MM'; "
-                                      "null if not shown"),
-        "confidence": _field({"type": "number"}, "0..1, how sure you are about amount and kind", nullable=False),
-    }
-    operation = {"type": "object", "properties": properties, "required": list(properties),
-                 "additionalProperties": False}
-    return {
-        "type": "object",
-        "properties": {
-            "input_type": {"type": "string", "enum": ["receipt", "bank_sms", "text", "other"]},
-            "intent": {"type": "string", "enum": list(INTENTS),
-                       "description": "operation = something to record; question = the user asks about their "
-                                      "own finances or wants advice; other = anything else"},
-            "operations": {"type": "array", "items": operation},
-        },
-        "required": ["input_type", "intent", "operations"],
-        "additionalProperties": False,
-    }
-
-
-EXTRACTION_SYSTEM = """You turn a user's message into draft financial operations for a personal finance app \
-in Uzbekistan. The input may be a receipt photo or PDF, a bank SMS / push notification (Uzcard, Humo, Visa; \
-Uzbek, Russian or English), or free text in Uzbek (Latin or Cyrillic), Russian or English.
-
-Rules:
-- Return one operation per separate payment. A receipt is ONE operation: use the TOTAL actually paid \
-("Jami", "Итого", "Всего", "To'lov", "Total"), never individual lines, VAT (QQS/НДС) or change. You may \
-list up to 3 main items briefly in the note.
-- A free-text message may contain several operations ("taksi 25000, kofe 18000") - return each.
-- amount: a plain decimal string without thousands separators. Uzbek amounts are written like \
-"125 000,00", "125.000" or "125,000" - all of these mean 125000. "18 ming"/"18 тысяч"/"18k" = 18000, \
-"12 mln"/"12 млн"/"12m" = 12000000. "so'm", "сум", "sum", "UZS" mean UZS; "$", "dollar", "USD" mean USD.
-- Bank SMS: "Pokupka"/"Oplata"/"Списание"/"To'lov"/"Xarid" = expense; "Popolnenie"/"Пополнение"/\
-"Зачисление"/"Kirim"/"Tushum" = income. The balance ("Balans"/"Остаток") is NOT the amount. Card digits \
-like "*1234" or "8600 **** **** 1234" give card_last4.
-- Choose account_id, category and subcategory ONLY from the lists provided by the user context, using the \
-exact names/ids. Match accounts by name, bank, card last 4 digits in the account name, or words like \
-"naqd"/"наличные"/"cash" for a cash account. If unsure, use null - the user will choose.
-- occurred_at only if a date/time is written in the input; otherwise null.
-- If the input contains no financial operation or is unreadable, return an empty operations list.
-- Do not invent data.
-
-intent:
-- "operation": the message records money spent, received or moved (every receipt and bank SMS is one).
-- "question": the user asks about their own finances, spending, balances, budgets or wants advice \
-("taksiga qancha ketdi?", "сколько я потратил в этом месяце?", "how can I save more?", "and last month?"). \
-Return an empty operations list for a question.
-- "other": greetings, chit-chat, unreadable input."""
-
-
-def build_context(accounts: Sequence[dict], categories: dict, now_text: str, conversation: bool = False) -> str:
-    """Plain-text description of the user's data for the prompt.
-
-    accounts: [{id, name, kind, currency}]; categories: {"expense": {name: [subs]}, "income": {name: []}}.
-    conversation: the user has just been asking the assistant questions, so short follow-ups are questions.
-    """
-    lines = [f"Current local date and time (Asia/Tashkent): {now_text}"]
-    if conversation:
-        lines.append("The user is in a conversation with the finance assistant: a short follow-up without an "
-                     "amount (e.g. 'and last month?', 'a taksi?') has intent=question.")
-    lines += ["", "User's accounts (id | name | kind | currency):"]
-    lines += [f"{a['id']} | {a['name']} | {a['kind']} | {a['currency']}" for a in accounts] or ["(none)"]
-    lines += ["", "Expense categories (category: subcategories):"]
-    lines += [f"- {name}: {', '.join(subs)}" for name, subs in categories.get("expense", {}).items()] or ["(none)"]
-    lines += ["", "Income categories:"]
-    lines += [f"- {name}" for name in categories.get("income", {})] or ["(none)"]
-    return "\n".join(lines)
-
-
-async def extract_operations(context: str, text: Optional[str] = None, media: Sequence[Media] = (),
-                             client: Optional[ClaudeClient] = None) -> dict:
-    """Ask Claude (the extraction model) for draft operations. Returns the raw (unvalidated) JSON object."""
-    client = client or get_client()
-    if not client.configured:
-        raise AIError("not_configured")
-    texts = [context]
-    if text:
-        texts.append(f"User message:\n{text}")
-    elif media:
-        texts.append("Extract the operations from the attached file.")
-    result = await client.generate_json(texts, media, schema=_schema(), system=EXTRACTION_SYSTEM,
-                                        model=client.extract_model, effort=EXTRACT_EFFORT)
-    if not isinstance(result, dict):
-        raise AIError("bad_response", "not an object")
-    return result

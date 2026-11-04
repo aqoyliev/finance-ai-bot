@@ -111,11 +111,29 @@ and sends **one message per threshold (80% and 100%) per period** for each categ
 Checks run in one service, `db.check_alerts` (`utils/db_api/alerts.py`), called through
 `utils/notify_alerts.send_alerts` from the handlers that save or edit operations.
 
-### AI input (Anthropic Claude)
+### AI provider (Google Gemini or Anthropic Claude)
+
+`AI_PROVIDER` selects the provider for everything AI: `gemini` (default) or `claude`. Both implement the same
+client interface (`utils/ai/core.py`: `get_client()` returns the configured one), so AI input, Ask AI and
+advice work the same way with either. Only Gemini has audio input, so voice messages need `AI_PROVIDER=gemini`.
+
+| Provider | Extraction (receipts, SMS, text, voice) | Ask AI and advice | Key |
+|----------|------------------------------------------|-------------------|-----|
+| `gemini` | `gemini-3.5-flash-lite` | `gemini-3.8-flash` | `GEMINI_API_KEY` ([aistudio.google.com/apikey](https://aistudio.google.com/apikey)) |
+| `claude` | `claude-haiku-5-5` | `claude-opus-5-5` | `ANTHROPIC_API_KEY` |
+
+Approximate Gemini cost (paid tier, [pricing page](https://aistudio.google.com/docs/pricing), November 2026):
+`gemini-3.5-flash-lite` is $0.30 / 1M input and $2.50 / 1M output tokens, so one receipt, SMS or short voice
+message is roughly $0.002-0.004; `gemini-3.8-flash` is $0.75 / $3.75 per 1M until 31.12.2026 ($1.50 / $7.50
+from 01.01.2027), so an Ask AI answer with a few tool calls or one advice is roughly $0.01-0.04.
+
+### AI input
 
 Send the bot any of these instead of using the menu:
 
-- a **receipt photo** (or an image / PDF sent as a file; JPEG, PNG, GIF, WebP, up to 5 MB, PDF up to 15 MB); the total paid is used, not the individual lines
+- a **receipt photo** (or an image / PDF sent as a file; Gemini: JPEG, PNG, WebP, HEIC up to 14 MB; Claude: JPEG, PNG, GIF, WebP up to 5 MB; PDF up to 14 MB); the total paid is used, not the individual lines
+- a **voice message** or audio file (Gemini only; up to 2 minutes and 14 MB): `taksiga 25 ming to'ladim naqd`;
+  it is transcribed and parsed in one request into the same drafts as text
 - **free text** in Uzbek, Russian or English: `taksi 25000 uob kartadan`, `кофе 18 тысяч наличными`,
   `got salary 12m to hamkorbank`; several operations in one message are fine
 - a **forwarded / pasted bank SMS** or notification (Uzcard, Humo, Visa; debit and credit)
@@ -126,21 +144,24 @@ required fields (e.g. the account) must be filled in first. Several drafts from 
 by one (⏭ Skip) or with ✅ Save all. The card warns when an almost identical operation already exists (same
 amount and account within 10 minutes, or the same SMS / photo sent again). Saved rows have `source = "ai"`.
 
-Voice messages are not supported (Claude has no audio input); the bot replies that you should send text or a photo.
+With `AI_PROVIDER=claude` voice messages get a short reply that voice input needs Google Gemini (Claude has no
+audio input). Longer voice messages get a "too long" reply before anything is downloaded.
 
-How it works: `utils/ai/claude.py` sends the input (image/PDF bytes inline, no separate OCR) plus a list of
-your accounts and categories to the Claude API (`claude-haiku-5-5` by default) and asks for JSON that follows
-a fixed schema (structured outputs, `output_config.format`).
+How it works: `utils/ai/core.py` sends the input (image/PDF/audio bytes inline, no separate OCR or speech-to-text)
+plus a list of your accounts and categories to the extraction model and asks for JSON that follows a fixed
+schema (Gemini: `response_json_schema` with JSON mode, low thinking level; Claude: structured outputs,
+`output_config.format`).
 `utils/ai/parser.py` never trusts the answer: amounts are re-parsed (`125 000,00`, `125.000`, `18 ming`, `12m`),
 the currency must be UZS/USD, the account must be yours and in that currency, the category must exist;
 anything doubtful is left empty for you to choose. Card digits from an SMS (`*1234`) match an account whose
 **name contains those 4 digits**, e.g. rename the account to `UOB 1234`.
 
 While you are inside a menu step (e.g. typing an amount), text goes to that step, not to the AI.
-Without `ANTHROPIC_API_KEY` the bot works as before and answers that AI input is not configured.
+Without the key of the selected provider the bot works as before and answers that AI input is not configured.
 
 > **Privacy:** receipts and texts you send for AI input, together with the names of your accounts and
-> categories, are sent to Anthropic (Claude API) for processing. Balances and history are not sent.
+> categories, are sent to the selected AI provider (Google Gemini API or Anthropic Claude API) for
+> processing. Balances and history are not sent.
 
 ### Ask AI and automatic advice
 
@@ -150,11 +171,13 @@ questions work ("and last month?"), until you press 🏠 Menu. You can also just
 button: the extraction model classifies every free-text message as an *operation*, a *question* or *other*;
 questions go to Ask AI, operations still become drafts. Photos, files and bank SMS always go to AI input.
 
-How it works (`utils/ai/assistant.py`, `utils/ai/tools.py`): the analysis model (`claude-opus-5-5`) gets
+How it works (`utils/ai/assistant.py`, `utils/ai/tools.py`): the analysis model (`gemini-3.8-flash` or
+`claude-opus-5-5`) gets
 read-only **client-side tools** backed by the service layer instead of a database dump:
 `get_period_summary`, `get_category_breakdown`, `search_transactions`, `get_accounts`, `get_budgets`,
 `get_categories`, `get_exchange_rate` (strict JSON schemas; results are compact JSON with amounts and
-currency; transfers are never income or expense). The bot runs the tool loop itself (at most 6 model requests
+currency; transfers are never income or expense; Gemini gets them as function declarations). The bot runs
+the tool loop itself (at most 6 model requests
 and 4 minutes per question) and answers in your language as plain text. The conversation is kept in memory
 (FSM) for an hour; after 6 questions it is compacted to the last 3 question/answer pairs.
 
@@ -170,7 +193,7 @@ missed while the bot was down at 09:00 is sent on the next start the same day. T
 summaries, not raw rows.
 
 > **Privacy:** your questions, the data the assistant looks up to answer them (totals, categories,
-> matching operations, balances) and the summaries used for advice are sent to Anthropic (Claude API).
+> matching operations, balances) and the summaries used for advice are sent to the selected AI provider.
 
 ### Environment variables (`.env`)
 
@@ -178,9 +201,15 @@ summaries, not raw rows.
 |----------------|--------------------------------------------------------------------------|
 | `BOT_TOKEN`    | Token from [@BotFather](https://t.me/BotFather)                          |
 | `ADMINS`       | Comma-separated Telegram user IDs allowed to use the bot                 |
-| `ip`           | Host IP address (used for deployment / webhooks)                         |
+| `ip`           | Host IP address (optional, unused with long polling)                     |
 | `DATABASE_URL` | SQLAlchemy async URL, default `sqlite+aiosqlite:///./finora.db`          |
-| `ANTHROPIC_API_KEY` | Anthropic API key ([console.anthropic.com](https://console.anthropic.com/settings/keys)); empty = AI input off |
+| `AI_PROVIDER` | `gemini` (default) or `claude`; voice input needs `gemini` |
+| `GEMINI_API_KEY` | Google AI Studio key ([aistudio.google.com/apikey](https://aistudio.google.com/apikey)); empty = AI off when the provider is `gemini` |
+| `GEMINI_EXTRACT_MODEL` | Model for receipts, SMS, free text and voice, default `gemini-3.5-flash-lite` |
+| `GEMINI_ANALYSIS_MODEL` | Model for Ask AI and advice, default `gemini-3.8-flash` |
+| `GEMINI_TIMEOUT` | Seconds per extraction / voice request, default `60` |
+| `GEMINI_ANALYSIS_TIMEOUT` | Seconds per Ask AI / advice request, default `180` |
+| `ANTHROPIC_API_KEY` | Anthropic API key ([console.anthropic.com](https://console.anthropic.com/settings/keys)); empty = AI off when the provider is `claude` |
 | `CLAUDE_EXTRACT_MODEL` | Model for receipts, SMS and free text, default `claude-haiku-5-5` |
 | `CLAUDE_ANALYSIS_MODEL` | Model for Ask AI and advice, default `claude-opus-5-5` |
 | `CLAUDE_TIMEOUT` | Seconds to wait for the extraction model, default `60`                   |
@@ -188,6 +217,47 @@ summaries, not raw rows.
 | `CLAUDE_REFUSAL_FALLBACK` | Retry a policy-declined Ask AI / advice request on Anthropic's recommended fallback model (server-side, beta), default `true` |
 
 `.env` is gitignored, so your secrets are never committed. Copy `.env.example` to start.
+
+### Deploy to Railway
+
+The bot uses long polling (no HTTP port, no webhook), so it runs on Railway as a worker service built
+from the `Dockerfile` (Playwright base image with Chromium for the report cards). `railway.json` sets
+the Dockerfile builder, restart on failure and exactly 1 replica.
+
+> **Only one instance may poll a bot token.** Stop your local bot (and any other deployment using the
+> same `BOT_TOKEN`) while Railway runs it, otherwise Telegram returns "Conflict: terminated by other
+> getUpdates request". Never scale the service above 1 replica.
+
+1. In Railway click **New Project -> Deploy from GitHub repo** and pick `aqoyliev/finance-ai-bot`.
+2. Open the service, **Settings -> Volumes** (or `Ctrl+K` -> "Volume") and **add a Volume mounted at `/data`**.
+   The SQLite file is stored there as `/data/finance.db`; without a volume the database is wiped on every deploy.
+3. In **Variables** set:
+
+   | Variable | Meaning |
+   |----------|---------|
+   | `BOT_TOKEN` | Token from @BotFather (required) |
+   | `ADMINS` | Comma-separated Telegram user IDs allowed to use the bot (required) |
+   | `DATABASE_URL` | Optional. The image defaults to `sqlite+aiosqlite:////data/finance.db` (four slashes = absolute path) |
+   | `AI_PROVIDER` | `gemini` (default) or `claude`; voice input needs `gemini` |
+   | `GEMINI_API_KEY` | Google AI Studio key; with `gemini` an empty key disables AI input, Ask AI and advice |
+   | `GEMINI_EXTRACT_MODEL` | Model for receipts, SMS, free text, voice (default `gemini-3.5-flash-lite`) |
+   | `GEMINI_ANALYSIS_MODEL` | Model for Ask AI and advice (default `gemini-3.8-flash`) |
+   | `GEMINI_TIMEOUT` / `GEMINI_ANALYSIS_TIMEOUT` | Request timeouts in seconds (defaults `60` / `180`) |
+   | `ANTHROPIC_API_KEY` | Claude API key; with `claude` an empty key disables AI input, Ask AI and advice |
+   | `CLAUDE_EXTRACT_MODEL` | Model for receipts, SMS, free text (default `claude-haiku-5-5`) |
+   | `CLAUDE_ANALYSIS_MODEL` | Model for Ask AI and advice (default `claude-opus-5-5`) |
+   | `CLAUDE_TIMEOUT` / `CLAUDE_ANALYSIS_TIMEOUT` | Request timeouts in seconds (defaults `60` / `180`) |
+   | `CLAUDE_REFUSAL_FALLBACK` | Retry policy-declined analysis requests on a fallback model (default `true`) |
+   | `WEBAPP_URL` | Mini App backend base URL (only needed if you use the Mini App) |
+
+4. **Deploy**, then open **Deployments -> View logs**. A healthy start shows the Alembic migration lines
+   and then aiogram polling; admins also get the "bot started" message in Telegram.
+5. Every push to the connected branch redeploys automatically. Migrations run on start-up.
+
+There is no healthcheck path because the bot serves no HTTP.
+
+Postgres would be an alternative to SQLite + Volume (add the Railway Postgres plugin and set
+`DATABASE_URL=postgresql+asyncpg://...`, plus the `asyncpg` dependency). It is not implemented here.
 
 ### Run
 
@@ -221,7 +291,7 @@ pytest
 ```
 
 The tests use a temporary SQLite database and never touch `.env` values or your real database.
-The Claude client is mocked, so no API key is needed and no requests are sent.
+The Claude and Gemini SDKs are mocked, so no API key is needed and no requests are sent.
 
 ## Project structure
 
@@ -243,9 +313,9 @@ The Claude client is mocked, so no API key is needed and no requests are sent.
 ├── states/                # FSM states
 ├── filters/               # custom filters
 ├── migrations/            # alembic migrations
-├── tests/                 # pytest suite (service layer, reports / alerts / charts, AI parsing with a mocked Claude client)
+├── tests/                 # pytest suite (service layer, reports / alerts / charts, AI parsing with mocked Claude / Gemini clients)
 └── utils/
-    ├── ai/                # Claude client (claude.py), validation (parser.py), Ask AI + advice (assistant.py, tools.py)
+    ├── ai/                # provider switch + extraction (core.py), clients (gemini.py, claude.py), validation (parser.py), Ask AI + advice (assistant.py, tools.py)
     ├── advice_scheduler.py # weekly / monthly advice (asyncio task)
     ├── charts.py          # matplotlib expense chart (PNG bytes)
     ├── db_api/            # database helpers (reports, budgets, alerts, operations, ...)

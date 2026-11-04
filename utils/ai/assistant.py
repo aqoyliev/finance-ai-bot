@@ -1,9 +1,13 @@
 """Ask AI (questions over the owner's data) and automatic advice, both on the analysis model.
 
+Provider-neutral: the client of the configured provider (utils/ai/core.py) runs each request and builds the
+history messages in its own format; this module only drives the loop.
+
 Q&A runs a bounded client-side tool loop: the model calls the read-only tools from utils/ai/tools.py, every
-tool_result of a turn goes back in one user message, and the loop stops after MAX_ITERATIONS requests or
+tool result of a turn goes back in one user message, and the loop stops after MAX_ITERATIONS requests or
 QA_TOTAL_TIMEOUT seconds. The conversation is kept by the caller (FSM data) as a list of turns and is only
-ever appended to, with the assistant content echoed back unchanged (thinking blocks included); the system
+ever appended to, with the assistant content echoed back unchanged (thinking blocks / thought signatures
+included); the system
 prompt and the tool list never change, so the thinking blocks stay valid and the prompt cache keeps hitting.
 When MAX_TURNS is reached the history is compacted once into the last KEEP_TURNS question/answer pairs as
 plain text (no earlier thinking replayed), then grows append-only again.
@@ -15,13 +19,13 @@ import logging
 import re
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, List, Optional, Sequence
 
 from utils.db_api import finance as db
 from utils.db_api import reports as rep
 
 from . import tools
-from .claude import AIError, ClaudeClient, assistant_content, get_client, response_text
+from .core import AIError, get_client
 
 log = logging.getLogger(__name__)
 
@@ -106,10 +110,22 @@ def flatten(turns: Sequence[Sequence[dict]]) -> List[dict]:
 
 
 def _turn_text(message: dict) -> str:
+    """The visible text of a history message in either provider's format (Claude content blocks or Gemini
+    parts; thinking blocks and thought summaries are skipped)."""
+    if "parts" in message:
+        return "".join(part.get("text") or "" for part in message.get("parts") or []
+                       if isinstance(part, dict) and not part.get("thought"))
     content = message.get("content")
     if isinstance(content, str):
         return content
     return "".join(block.get("text", "") for block in content or [] if block.get("type") == "text")
+
+
+def _text_turn(question: str, answer: str, gemini: bool) -> List[dict]:
+    if gemini:
+        return [{"role": "user", "parts": [{"text": question}]}, {"role": "model", "parts": [{"text": answer}]}]
+    return [{"role": "user", "content": [{"type": "text", "text": question}]},
+            {"role": "assistant", "content": [{"type": "text", "text": answer}]}]
 
 
 def compact(turns: List[List[dict]]) -> List[List[dict]]:
@@ -122,9 +138,8 @@ def compact(turns: List[List[dict]]) -> List[List[dict]]:
     kept = []
     for turn in turns[-KEEP_TURNS:]:
         question, answer = _turn_text(turn[0]), _turn_text(turn[-1])
-        if question and answer and turn[-1].get("role") == "assistant":
-            kept.append([{"role": "user", "content": [{"type": "text", "text": question}]},
-                         {"role": "assistant", "content": [{"type": "text", "text": answer}]}])
+        if question and answer and turn[-1].get("role") in ("assistant", "model"):
+            kept.append(_text_turn(question, answer, "parts" in turn[0]))
     return kept
 
 
@@ -149,58 +164,42 @@ def clean_answer(text: str) -> str:
     return re.sub(r"\n{3,}", "\n\n", text).strip()
 
 
-def _check(response: Any) -> str:
-    """stop_reason first: refusal and truncation are errors; returns the stop reason."""
-    stop_reason = getattr(response, "stop_reason", None)
-    if stop_reason == "refusal":
-        raise AIError("refused")
-    if stop_reason == "max_tokens":
-        raise AIError("bad_response", "max_tokens")
-    return stop_reason
-
-
-async def _tool_loop(client: ClaudeClient, user_id: int, history: List[dict], question: dict) -> List[dict]:
+async def _tool_loop(client, user_id: int, history: List[dict], question: dict) -> List[dict]:
     """Run the model with tools until it answers. Returns the new messages of this turn."""
     turn = [question]
     for iteration in range(MAX_ITERATIONS):
-        request = client.build_analysis_request(history + turn, system=QA_SYSTEM, effort=QA_EFFORT,
-                                                max_tokens=QA_MAX_TOKENS, tools=tools.TOOLS, cache=True)
-        response = await client.create_analysis(request)
-        stop_reason = _check(response)
-        turn.append({"role": "assistant", "content": assistant_content(response.content)})
-        if stop_reason == "pause_turn":  # server-side pause: send the turn back as is to continue
+        step = await client.analysis_step(history + turn, system=QA_SYSTEM, effort=QA_EFFORT,
+                                          max_tokens=QA_MAX_TOKENS, tools=tools.TOOLS, cache=True)
+        turn.append(step.message)
+        if step.stop == "pause":  # server-side pause: send the turn back as is to continue
             continue
-        calls = [block for block in response.content if getattr(block, "type", None) == "tool_use"]
-        if stop_reason != "tool_use" or not calls:
-            if not response_text(response).strip():
+        if step.stop != "tool_use":
+            if not step.text.strip():
                 raise AIError("bad_response", "empty")
             return turn
         results = []
-        for call in calls:
+        for call in step.calls:
             content, is_error = await tools.run_tool(user_id, call.name, call.input)
-            result = {"type": "tool_result", "tool_use_id": call.id, "content": content}
-            if is_error:
-                result["is_error"] = True
-            results.append(result)
+            results.append((call, content, is_error))
+        note = None
         if iteration == MAX_ITERATIONS - 2:
             # The next request is the last one: ask for the answer now (text after the tool results)
-            results.append({"type": "text", "text": "Tool budget reached. Answer now with the data you already "
-                                                    "have; do not call more tools."})
-        turn.append({"role": "user", "content": results})
+            note = "Tool budget reached. Answer now with the data you already have; do not call more tools."
+        turn.append(client.tool_results_message(results, note))
     raise AIError("bad_response", "tool loop limit")
 
 
 async def ask(user_id: int, question: str, lang: str, turns: Optional[List[List[dict]]] = None, *,
-              client: Optional[ClaudeClient] = None, today: Optional[date] = None) -> Answer:
+              client: Any = None, today: Optional[date] = None) -> Answer:
     """Answer a question about the user's data. `turns` is the earlier conversation (see compact())."""
     client = client or get_client()
     if not client.configured:
         raise AIError("not_configured")
     user = await db.get_user(user_id)
     today = today or db.now().date()
-    turns = compact(list(turns or []))
-    message = {"role": "user", "content": [
-        {"type": "text", "text": f"{context_line(today, user.salary_day, lang)}\n\n{question.strip()}"}]}
+    # A history written by the other provider (AI_PROVIDER changed) cannot be replayed: start over
+    turns = compact([turn for turn in turns or [] if turn and client.owns_history(turn[0])])
+    message = client.user_message(f"{context_line(today, user.salary_day, lang)}\n\n{question.strip()}")
     try:
         turn = await asyncio.wait_for(_tool_loop(client, user_id, flatten(turns), message), QA_TOTAL_TIMEOUT)
     except asyncio.TimeoutError:
@@ -320,7 +319,7 @@ class Advice:
     last_day: date
 
 
-async def advice(user_id: int, kind: str, lang: str, *, client: Optional[ClaudeClient] = None,
+async def advice(user_id: int, kind: str, lang: str, *, client: Any = None,
                  today: Optional[date] = None) -> Optional[Advice]:
     """Generate advice of `kind` (weekly | monthly | now). None when there is nothing to review."""
     if kind not in ADVICE_KINDS:
@@ -334,12 +333,9 @@ async def advice(user_id: int, kind: str, lang: str, *, client: Optional[ClaudeC
         return None
     prompt = (f"{INSTRUCTIONS[kind]}\nToday: {today.isoformat()}. Language: {LANGUAGE_NAMES.get(lang, 'English')}."
               f"\n\nFigures:\n{tools.dumps(data)}")
-    request = client.build_analysis_request([{"role": "user", "content": [{"type": "text", "text": prompt}]}],
-                                            system=ADVICE_SYSTEM, effort=ADVICE_EFFORT[kind],
-                                            max_tokens=ADVICE_MAX_TOKENS[kind])
-    response = await client.create_analysis(request)
-    _check(response)
-    text = clean_answer(response_text(response))
+    step = await client.analysis_step([client.user_message(prompt)], system=ADVICE_SYSTEM,
+                                      effort=ADVICE_EFFORT[kind], max_tokens=ADVICE_MAX_TOKENS[kind])
+    text = clean_answer(step.text)
     if not text:
         raise AIError("bad_response", "empty")
     return Advice(text, date.fromisoformat(data["window"]["start"]), date.fromisoformat(data["window"]["last_day"]))

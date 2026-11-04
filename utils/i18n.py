@@ -84,15 +84,16 @@ TEXTS = {
               "Sozlamalar → Byudjetlar: kategoriya uchun oylik limit. Limitning yoki kredit karta limitining "
               "80% va 100% ga yetganda bot xabar yuboradi (har bir davrda har biri bir marta).\n\n"
               "<b>🤖 AI kiritish</b>\n"
-              "Menyusiz yozish: chek rasmini, bank SMS'ini yoki oddiy matnni yuboring "
+              "Menyusiz yozish: chek rasmini yoki PDF, ovozli xabar, bank SMS'ini yoki oddiy matnni yuboring "
               "(masalan «taksi 25000 uob kartadan», «kofe 18 ming naqd»). Bot qoralama ko'rsatadi — "
               "tekshiring, kerak bo'lsa tahrirlang va ✅ Saqlash ni bosing. "
-              "Rasm va matn tahlil uchun Anthropic Claude'ga yuboriladi.\n\n"
+              "Ovozli xabar 2 daqiqagacha bo'lishi kerak va faqat Google Gemini bilan ishlaydi. "
+              "Rasm, ovoz va matn tahlil uchun AI xizmatiga (Google Gemini yoki Anthropic Claude) yuboriladi.\n\n"
               "<b>💬 AI'dan so'rash va maslahatlar</b>\n"
               "🤖 AI'dan so'rash tugmasini bosing yoki shunchaki savol yozing (masalan «bu oy taksiga qancha "
               "ketdi?»). Har dushanba 09:00 da haftalik xulosa, yangi moliyaviy oy boshlanganda 09:00 da oylik "
               "xulosa keladi; Sozlamalar → AI maslahatlari'da o'chirish mumkin. Savollar va hisob-kitob "
-              "xulosalari Anthropic'ga yuboriladi.",
+              "xulosalari AI xizmatiga yuboriladi.",
         "ru": "<b>Команды</b>\n"
               "/start — главное меню\n"
               "/salaryday 5 — день начала финансового месяца (1–28)\n"
@@ -111,15 +112,16 @@ TEXTS = {
               "Настройки → Бюджеты: месячный лимит на категорию. Бот напишет, когда лимит или кредитный лимит "
               "карты дойдёт до 80% и 100% (по одному разу за период).\n\n"
               "<b>🤖 AI-ввод</b>\n"
-              "Без меню: отправьте фото чека, банковское SMS или просто текст "
+              "Без меню: отправьте фото или PDF чека, голосовое, банковское SMS или просто текст "
               "(например «такси 25000 uob», «кофе 18 тысяч наличными»). Бот покажет черновик — проверьте, "
               "при необходимости измените и нажмите ✅ Сохранить. "
-              "Фото и текст отправляются на анализ в Anthropic Claude.\n\n"
+              "Голосовые — до 2 минут, работают только с Google Gemini. "
+              "Фото, голос и текст отправляются на анализ в AI-сервис (Google Gemini или Anthropic Claude).\n\n"
               "<b>💬 Вопросы к AI и советы</b>\n"
               "Нажмите 🤖 Спросить AI или просто напишите вопрос (например «сколько я потратил на такси в этом "
               "месяце?»). Каждый понедельник в 09:00 приходит недельная сводка, а в 09:00 в первый день нового "
               "финансового месяца — месячная; отключить: Настройки → AI-советы. Вопросы и сводки по вашим "
-              "данным отправляются в Anthropic.",
+              "данным отправляются в AI-сервис.",
         "en": "<b>Commands</b>\n"
               "/start — main menu\n"
               "/salaryday 5 — day your financial month starts (1–28)\n"
@@ -139,15 +141,16 @@ TEXTS = {
               "Settings → Budgets: a monthly limit per category. The bot messages you when a budget or a credit "
               "card limit reaches 80% and 100% (once per period each).\n\n"
               "<b>🤖 AI input</b>\n"
-              "Skip the menus: send a receipt photo, a bank SMS or plain text "
+              "Skip the menus: send a receipt photo or PDF, a voice message, a bank SMS or plain text "
               "(e.g. \"taxi 25000 from uob\", \"got salary 12m to hamkorbank\"). The bot shows a draft — "
               "check it, edit if needed and press ✅ Save. "
-              "Photos and text are sent to Anthropic Claude for analysis.\n\n"
+              "Voice messages can be up to 2 minutes and work with Google Gemini only. "
+              "Photos, voice and text are sent to the AI service (Google Gemini or Anthropic Claude) for analysis.\n\n"
               "<b>💬 Ask AI and advice</b>\n"
               "Press 🤖 Ask AI or just type a question (e.g. \"how much did I spend on taxi this month?\"). "
               "A weekly summary arrives every Monday at 09:00 and a monthly review at 09:00 on the first day of "
               "a new financial month; turn them off in Settings → AI advice. Questions and summaries of your "
-              "data are sent to Anthropic.",
+              "data are sent to the AI service.",
     },
     "use_menu": {
         "uz": "Quyidagi menyudan foydalaning.",
@@ -489,11 +492,11 @@ TEXTS = {
         "en": "🗑 Operation deleted. New balances:",
     },
 
-    # ---- AI input (receipts, free text, bank SMS) ----
+    # ---- AI input (receipts, voice, free text, bank SMS) ----
     "ai_not_configured": {
-        "uz": "🤖 AI kiritish sozlanmagan (ANTHROPIC_API_KEY yo'q). Menyudan foydalaning.",
-        "ru": "🤖 AI-ввод не настроен (нет ANTHROPIC_API_KEY). Воспользуйтесь меню.",
-        "en": "🤖 AI input is not configured (no ANTHROPIC_API_KEY). Please use the menu.",
+        "uz": "🤖 AI kiritish sozlanmagan ({env_key} yo'q). Menyudan foydalaning.",
+        "ru": "🤖 AI-ввод не настроен (нет {env_key}). Воспользуйтесь меню.",
+        "en": "🤖 AI input is not configured (no {env_key}). Please use the menu.",
     },
     "ai_analyzing": {"uz": "⏳ Tahlil qilinmoqda...", "ru": "⏳ Анализирую...", "en": "⏳ Analyzing..."},
     "ai_nothing_found": {
@@ -504,14 +507,30 @@ TEXTS = {
         "en": "🤖 No operation found in this message. Try again (e.g. \"taxi 25000 uob\") or use the menu.",
     },
     "ai_unsupported_file": {
-        "uz": "Bu fayl turini o'qiy olmayman. Rasm yoki PDF yuboring.",
-        "ru": "Не могу прочитать этот тип файла. Отправьте фото или PDF.",
-        "en": "I can't read this file type. Send a photo or a PDF.",
+        "uz": "Bu fayl turini o'qiy olmayman. Rasm, PDF yoki ovozli xabar yuboring.",
+        "ru": "Не могу прочитать этот тип файла. Отправьте фото, PDF или голосовое сообщение.",
+        "en": "I can't read this file type. Send a photo, a PDF or a voice message.",
     },
-    "ai_voice_unsupported": {
-        "uz": "🎤 Ovozli xabarlar qo'llab-quvvatlanmaydi. Matn yoki chek rasmini yuboring.",
-        "ru": "🎤 Голосовые сообщения не поддерживаются. Отправьте текст или фото чека.",
-        "en": "🎤 Voice messages are not supported. Send text or a photo of the receipt.",
+    "ai_voice_needs_gemini": {
+        "uz": "🎤 Ovozli xabarlarni faqat Google Gemini tushunadi (AI_PROVIDER=gemini). "
+              "Hozircha matn yoki chek rasmini yuboring.",
+        "ru": "🎤 Голосовые сообщения понимает только Google Gemini (AI_PROVIDER=gemini). "
+              "Пока отправьте текст или фото чека.",
+        "en": "🎤 Voice messages need Google Gemini (AI_PROVIDER=gemini). "
+              "For now, send text or a photo of the receipt.",
+    },
+    "ai_voice_too_long": {
+        "uz": "🎤 Ovozli xabar juda uzun: {minutes} daqiqagacha va {mb} MB gacha bo'lsin. "
+              "Qisqaroq yozib yuboring yoki matn bilan yozing.",
+        "ru": "🎤 Голосовое слишком длинное: до {minutes} минут и до {mb} МБ. "
+              "Запишите покороче или напишите текстом.",
+        "en": "🎤 The voice message is too long: up to {minutes} minutes and {mb} MB. "
+              "Record a shorter one or type it as text.",
+    },
+    "ai_video_note_unsupported": {
+        "uz": "📹 Video xabarlarni o'qimayman. Ovozli xabar, matn yoki chek rasmini yuboring.",
+        "ru": "📹 Видеосообщения не поддерживаются. Отправьте голосовое, текст или фото чека.",
+        "en": "📹 Video notes are not supported. Send a voice message, text or a photo of the receipt.",
     },
     "ai_error_refused": {
         "uz": "AI bu so'rovni bajarishdan bosh tortdi. Boshqa rasm yoki matn yuboring.",
@@ -529,9 +548,9 @@ TEXTS = {
         "en": "🚦 The AI request quota is exhausted. Try later or use the menu.",
     },
     "ai_error_auth": {
-        "uz": "🔑 ANTHROPIC_API_KEY noto'g'ri yoki unga ruxsat yo'q.",
-        "ru": "🔑 ANTHROPIC_API_KEY неверный или не имеет доступа.",
-        "en": "🔑 ANTHROPIC_API_KEY is invalid or has no access.",
+        "uz": "🔑 {env_key} noto'g'ri yoki unga ruxsat yo'q.",
+        "ru": "🔑 {env_key} неверный или не имеет доступа.",
+        "en": "🔑 {env_key} is invalid or has no access.",
     },
     "ai_error_bad_input": {
         "uz": "AI bu faylni o'qiy olmadi. Boshqa rasm yuboring yoki matn bilan yozing.",
@@ -549,8 +568,9 @@ TEXTS = {
         "en": "The AI returned an unreadable answer. Please try again.",
     },
     "ai_error_too_large": {
-        "uz": "Fayl juda katta (rasm 5 MB gacha, PDF 15 MB gacha).", "ru": "Файл слишком большой (фото до 5 МБ, PDF до 15 МБ).",
-        "en": "The file is too large (images up to 5 MB, PDFs up to 15 MB).",
+        "uz": "Fayl juda katta (rasm 5 MB gacha, PDF 14 MB gacha).",
+        "ru": "Файл слишком большой (фото до 5 МБ, PDF до 14 МБ).",
+        "en": "The file is too large (images up to 5 MB, PDFs up to 14 MB).",
     },
     "ai_draft_title": {
         "uz": "🤖 <b>Qoralama {index}/{total}</b> · {kind}", "ru": "🤖 <b>Черновик {index}/{total}</b> · {kind}",
@@ -757,17 +777,18 @@ TEXTS = {
               "• Bu oy taksiga qancha ketdi?\n• O'tgan oyga nisbatan ko'proq sarfladimmi?\n"
               "• Kredit kartamda qancha limit qoldi?\n\n"
               "Qo'shimcha savollar ham berishingiz mumkin. Chiqish uchun 🏠 Menyu ni bosing.\n"
-              "<i>Savollar va kerakli ma'lumotlar Anthropic Claude'ga yuboriladi.</i>",
+              "<i>Savollar va kerakli ma'lumotlar AI xizmatiga (Google Gemini yoki Anthropic Claude) yuboriladi.</i>",
         "ru": "<b>🤖 Спросить AI</b>\n\nНапишите вопрос о своих финансах, например:\n"
               "• Сколько я потратил на такси в этом месяце?\n• Я трачу больше, чем в прошлом месяце?\n"
               "• Сколько осталось лимита на кредитке?\n\n"
               "Можно задавать уточняющие вопросы. Чтобы выйти, нажмите 🏠 Меню.\n"
-              "<i>Вопросы и нужные данные отправляются в Anthropic Claude.</i>",
+              "<i>Вопросы и нужные данные отправляются в AI-сервис (Google Gemini или Anthropic Claude).</i>",
         "en": "<b>🤖 Ask AI</b>\n\nAsk anything about your finances, for example:\n"
               "• How much did I spend on taxi this month?\n• Am I spending more than last month?\n"
               "• How much credit is left on my card?\n\n"
               "Follow-up questions work too. Press 🏠 Menu to leave.\n"
-              "<i>Questions and the data needed to answer them are sent to Anthropic Claude.</i>",
+              "<i>Questions and the data needed to answer them are sent to the AI service "
+              "(Google Gemini or Anthropic Claude).</i>",
     },
     "ask_thinking": {"uz": "🤔 O'ylayapman...", "ru": "🤔 Думаю...", "en": "🤔 Thinking..."},
     "ask_error_refused": {
@@ -793,20 +814,20 @@ TEXTS = {
               "tejash bo'yicha maslahatlar. Holati: {weekly}\n"
               "📆 Oylik xulosa — yangi moliyaviy oy boshlanadigan kuni ({salary_day}-sana) 09:00 da: butun davr, "
               "byudjetlar, kredit kartalar. Holati: {monthly}\n\n"
-              "Davrda amallar bo'lmasa, xulosa yuborilmaydi. Hisob-kitob xulosalari Anthropic Claude'ga yuboriladi.",
+              "Davrda amallar bo'lmasa, xulosa yuborilmaydi. Hisob-kitob xulosalari AI xizmatiga yuboriladi.",
         "ru": "<b>🤖 AI-советы</b>\n\n"
               "📅 Недельная сводка — каждый понедельник в 09:00: последние 7 дней, сравнение с прошлой неделей, "
               "советы по экономии. Сейчас: {weekly}\n"
               "📆 Месячная сводка — в день начала нового финансового месяца ({salary_day}-е число) в 09:00: весь "
               "период, бюджеты, кредитные карты. Сейчас: {monthly}\n\n"
               "Если операций за период не было, сводка не отправляется. Сводки по вашим данным отправляются в "
-              "Anthropic Claude.",
+              "AI-сервис.",
         "en": "<b>🤖 AI advice</b>\n\n"
               "📅 Weekly summary — every Monday at 09:00: the last 7 days compared with the week before, plus "
               "saving tips. Now: {weekly}\n"
               "📆 Monthly review — at 09:00 on the day your new financial month starts (day {salary_day}): the "
               "whole period, budgets and credit cards. Now: {monthly}\n\n"
-              "Nothing is sent for a period without operations. Summaries of your data are sent to Anthropic Claude.",
+              "Nothing is sent for a period without operations. Summaries of your data are sent to the AI service.",
     },
     "advice_preparing": {
         "uz": "⏳ Maslahat tayyorlanmoqda...", "ru": "⏳ Готовлю совет...", "en": "⏳ Preparing advice...",
