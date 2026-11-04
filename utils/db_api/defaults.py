@@ -52,3 +52,9 @@ INCOME_CATEGORIES = {
     "ru": ["Зарплата", "Дополнительный доход", "Перевод от другого человека", "Возврат долга", "Прочий доход"],
     "uz": ["Maosh", "Qo'shimcha daromad", "Boshqa odamdan o'tkazma", "Qarz qaytarilishi", "Boshqa daromad"],
 }
+
+# Category used when the AI could not tell one (any language's name is reused if it already exists)
+FALLBACK_CATEGORIES = {
+    "expense": {"uz": "Boshqa", "ru": "Прочее", "en": "Other"},
+    "income": {"uz": "Boshqa daromad", "ru": "Прочий доход", "en": "Other income"},
+}

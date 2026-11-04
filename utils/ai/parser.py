@@ -1,8 +1,9 @@
 """Validation of Claude output and mapping onto the user's own accounts and categories.
 
 The model's answer is never trusted: amounts are re-parsed, currencies checked, accounts must belong to
-the user (and match the currency), categories must exist. Anything doubtful is left empty (None) so the
-user fills it in on the draft card. Drafts are plain dicts so they can live in FSM storage.
+the user (and match the currency), categories must exist. Anything doubtful is left empty (None): the
+handler then asks for the account or falls back to the "Other" category. Drafts are plain dicts so they can
+wait in FSM storage while the user picks an account.
 """
 import hashlib
 import re
@@ -17,7 +18,6 @@ from utils.misc.money import MAX_AMOUNT
 KINDS = ("expense", "income", "transfer")
 MAX_DRAFTS = 10
 MAX_NOTE_LENGTH = 200
-LOW_CONFIDENCE = 0.6
 MAX_PAST = timedelta(days=366)  # older dates from a receipt are treated as misread
 MAX_FUTURE = timedelta(days=1)
 
@@ -57,8 +57,7 @@ class Draft:
     confidence: float = 0.0
     card_last4: Optional[str] = None
     source_ref: Optional[str] = None
-    duplicate: bool = False
-    notes: List[str] = field(default_factory=list)  # validation notices (i18n keys)
+    notes: List[str] = field(default_factory=list)  # validation codes, logged only
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -267,7 +266,7 @@ def parse_response(raw: Any, ctx: UserContext, now: datetime, source_ref: Option
 
 
 def missing_fields(draft: Draft) -> List[str]:
-    """Required fields still empty; Save is possible only when this is empty."""
+    """Required fields still empty; a draft is saved only when this is empty."""
     missing = []
     if not draft.amount_minor:
         missing.append("amount")
@@ -287,12 +286,17 @@ def occurred_at(draft: Draft) -> Optional[datetime]:
     return datetime.fromisoformat(draft.occurred_at) if draft.occurred_at else None
 
 
-async def mark_duplicate(user_id: int, draft: Draft, now: datetime) -> Draft:
-    """Flag a draft that looks like an already saved operation (same input, or same amount/account/time)."""
-    similar = await db.find_similar(user_id, draft.amount_minor, draft.account_id,
-                                    occurred_at(draft) or now, source_ref=draft.source_ref)
-    draft.duplicate = bool(similar)
-    return draft
+async def duplicate_of(user_id: int, draft: Draft, now: datetime) -> Optional[str]:
+    """How a draft repeats an already saved operation.
+
+    "source": the same input (SMS text, photo or file) was saved before, so it must not be saved again;
+    "similar": the same amount on the same account within a few minutes (saved, but the user is warned);
+    None: nothing alike."""
+    if draft.source_ref and await db.find_similar(user_id, None, None, now, source_ref=draft.source_ref):
+        return "source"
+    if await db.find_similar(user_id, draft.amount_minor, draft.account_id, occurred_at(draft) or now):
+        return "similar"
+    return None
 
 
 async def save_draft(user_id: int, draft: Draft) -> db.SavedOperation:
@@ -307,6 +311,12 @@ async def save_draft(user_id: int, draft: Draft) -> db.SavedOperation:
         user_id, draft.kind, draft.currency, [db.Leg(draft.account_id, draft.amount_minor)],
         category=draft.category, subcategory=draft.subcategory, note=draft.note,
         occurred_at=occurred_at(draft), source="ai", source_ref=draft.source_ref)
+
+
+def input_type(raw: Any) -> str:
+    """'receipt' / 'bank_sms' / 'text' / 'other' from the extraction answer."""
+    value = raw.get("input_type") if isinstance(raw, dict) else None
+    return value if value in ("receipt", "bank_sms", "text", "other") else "other"
 
 
 def intent(raw: Any) -> str:

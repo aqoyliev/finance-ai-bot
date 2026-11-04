@@ -10,7 +10,7 @@ from .finance import back_button
 def history(items: Iterable[Tuple[int, str]], lang: str) -> InlineKeyboardMarkup:
     """items: (transaction id, button label)."""
     rows = [[InlineKeyboardButton(label, callback_data=f"opv:{tx_id}")] for tx_id, label in items]
-    rows.append([back_button(lang)])
+    rows.append([back_button(lang, "menu:settings")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -32,3 +32,7 @@ def confirm_delete(tx_id: int, lang: str) -> InlineKeyboardMarkup:
         [InlineKeyboardButton(t("btn_yes_delete", lang), callback_data=f"opdy:{tx_id}")],
         [back_button(lang, f"opv:{tx_id}")],
     ])
+
+
+def back_to_history(lang: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[[back_button(lang, "menu:history")]])

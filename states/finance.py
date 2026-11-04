@@ -27,14 +27,8 @@ class OperationEdit(StatesGroup):
 
 
 class AIDraft(StatesGroup):
-    review = State()  # AI drafts are shown; free text / media starts a new analysis
-    amount = State()  # typing a corrected amount for the current draft
-    date = State()  # typing a corrected date for the current draft
+    account = State()  # AI operations wait for the payment method; free text / media starts a new analysis
 
 
 class BudgetForm(StatesGroup):
     amount = State()  # typing the monthly limit of a category
-
-
-class AskAI(StatesGroup):
-    question = State()  # Ask AI mode: every text message is a question to the assistant

@@ -12,7 +12,7 @@ def account_list(accounts: Iterable, lang: str) -> InlineKeyboardMarkup:
     rows = [[InlineKeyboardButton(f"{a.name} ({a.currency})", callback_data=f"acs:view:{a.id}")]
             for a in accounts]
     rows.append([InlineKeyboardButton(t("btn_add_account", lang), callback_data="acs:add")])
-    rows.append([back_button(lang)])
+    rows.append([back_button(lang, "menu:settings")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 

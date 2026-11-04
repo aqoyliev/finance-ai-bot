@@ -121,7 +121,7 @@ async def create_from_form(message: types.Message, state: FSMContext, lang: str,
         account = await db.create_account(message.from_user.id, data["new_name"], data["new_kind"],
                                           data["new_currency"], opening, data.get("new_limit", 0))
     except (KeyError, db.FinanceError):
-        await message.answer(t("session_lost", lang), reply_markup=kb.main_menu(lang))
+        await message.answer(t("session_lost", lang))
         return
     await render_account(message, account, lang, edit=False, notice=t("account_created", lang))
 
@@ -174,7 +174,7 @@ async def finish_edit(message: types.Message, state: FSMContext, lang: str, chan
     try:
         account = await change(message.from_user.id, account_id)
     except db.FinanceError:
-        await message.answer(t("account_not_found", lang), reply_markup=kb.main_menu(lang))
+        await message.answer(t("account_not_found", lang))
         return
     await render_account(message, account, lang, edit=False, notice=t("account_updated", lang))
 

@@ -12,7 +12,7 @@ def cancel_button(lang: str) -> InlineKeyboardButton:
     return InlineKeyboardButton(t("btn_cancel", lang), callback_data="cancel")
 
 
-def back_button(lang: str, callback_data: str = "menu:main") -> InlineKeyboardButton:
+def back_button(lang: str, callback_data: str) -> InlineKeyboardButton:
     return InlineKeyboardButton(t("btn_back", lang), callback_data=callback_data)
 
 
@@ -20,22 +20,6 @@ def languages() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(name, callback_data=f"lang:{code}")] for code, name in LANGUAGE_NAMES.items()
     ])
-
-
-def main_menu(lang: str) -> InlineKeyboardMarkup:
-    def button(key: str, action: str) -> InlineKeyboardButton:
-        return InlineKeyboardButton(t(key, lang), callback_data=f"menu:{action}")
-
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [button("btn_expense", "expense"), button("btn_income", "income")],
-        [button("btn_transfer", "transfer"), button("btn_accounts", "accounts")],
-        [button("btn_report", "report"), button("btn_history", "history")],
-        [button("btn_ask_ai", "ask"), button("btn_settings", "settings")],
-    ])
-
-
-def back_to_menu(lang: str) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[[back_button(lang)]])
 
 
 def choices(items: Iterable, prefix: str, lang: str,
@@ -79,7 +63,11 @@ def settings(lang: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(t("btn_accounts", lang), callback_data="menu:accounts")],
         [InlineKeyboardButton(t("btn_budgets", lang), callback_data="bud:list")],
+        [InlineKeyboardButton(t("btn_history", lang), callback_data="menu:history")],
         [InlineKeyboardButton(t("btn_ai_advice", lang), callback_data="set:advice")],
         [InlineKeyboardButton(t("btn_language", lang), callback_data="set:lang")],
-        [back_button(lang)],
     ])
+
+
+def back_to_settings(lang: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[[back_button(lang, "menu:settings")]])

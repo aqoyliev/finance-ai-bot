@@ -37,13 +37,18 @@ async def rate_command(message: types.Message, lang: str):
     await message.answer(t("rate_saved", lang, rate=rate))
 
 
+async def render_settings(message: types.Message, user_id: int, lang: str, edit: bool = True):
+    """Settings: accounts, budgets, history, AI advice, language (from the reply keyboard or a Back button)."""
+    user = await db.get_user(user_id)
+    send = message.edit_text if edit else message.answer
+    await send(t("settings", lang, salary_day=user.salary_day), reply_markup=kb.settings(lang))
+
+
 @dp.callback_query_handler(Text(equals="menu:settings"), state="*")
 async def show_settings(call: types.CallbackQuery, state: FSMContext, lang: str):
     await call.answer()
     await state.finish()
-    user = await db.get_user(call.from_user.id)
-    await call.message.edit_text(t("settings", lang, salary_day=user.salary_day),
-                                 reply_markup=kb.settings(lang))
+    await render_settings(call.message, call.from_user.id, lang)
 
 
 @dp.callback_query_handler(Text(equals="set:lang"), state="*")

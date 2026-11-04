@@ -173,7 +173,7 @@ async def test_duplicate_guard_and_save_as_ai():
     now = db.now()
     draft = parser.Draft(kind="expense", amount_minor=2_500_000, currency="UZS", category="Food",
                          account_id=card.id, confidence=0.9, source_ref="sms-hash")
-    assert (await parser.mark_duplicate(USER, draft, now)).duplicate is False
+    assert await parser.duplicate_of(USER, draft, now) is None
 
     saved = await parser.save_draft(USER, draft)
     assert saved.transactions[0].source == "ai" and saved.transactions[0].source_ref == "sms-hash"
@@ -182,14 +182,17 @@ async def test_duplicate_guard_and_save_as_ai():
     # Same amount + account within minutes
     again = parser.Draft(kind="expense", amount_minor=2_500_000, currency="UZS", category="Food",
                          account_id=card.id)
-    assert (await parser.mark_duplicate(USER, again, now + timedelta(minutes=3))).duplicate is True
+    assert await parser.duplicate_of(USER, again, now + timedelta(minutes=3)) == "similar"
     # ... but not hours later, on another account or with another amount
-    assert (await parser.mark_duplicate(USER, again, now + timedelta(hours=2))).duplicate is False
+    assert await parser.duplicate_of(USER, again, now + timedelta(hours=2)) is None
     other = parser.Draft(amount_minor=2_500_000, account_id=cash.id)
-    assert (await parser.mark_duplicate(USER, other, now)).duplicate is False
-    # The same SMS forwarded again, even much later
+    assert await parser.duplicate_of(USER, other, now) is None
+    # The same SMS forwarded again, even much later: never saved twice
     resent = parser.Draft(amount_minor=1, account_id=cash.id, source_ref="sms-hash")
-    assert (await parser.mark_duplicate(USER, resent, now + timedelta(days=3))).duplicate is True
+    assert await parser.duplicate_of(USER, resent, now + timedelta(days=3)) == "source"
+    # A repeat of the same input wins over a merely similar one
+    same = parser.Draft(amount_minor=2_500_000, account_id=card.id, source_ref="sms-hash")
+    assert await parser.duplicate_of(USER, same, now) == "source"
 
 
 async def test_save_transfer_draft_and_incomplete_rejected():

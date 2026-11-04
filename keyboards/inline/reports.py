@@ -12,7 +12,7 @@ MAX_CATEGORY_BUTTONS = 10
 
 
 def report_view(report, category_ids: Dict[str, int], lang: str) -> InlineKeyboardMarkup:
-    """Category buttons (drill-down), previous / next period, budgets, accounts and back to the menu."""
+    """Category buttons (drill-down), previous / next period, budgets and advice."""
     names = list(dict.fromkeys(row.name for s in report.currencies for row in s.categories))
     buttons = [InlineKeyboardButton(name, callback_data=f"repc:{report.offset}:{category_ids[name]}")
                for name in names if name in category_ids][:MAX_CATEGORY_BUTTONS]
@@ -28,9 +28,7 @@ def report_view(report, category_ids: Dict[str, int], lang: str) -> InlineKeyboa
     if nav:
         rows.append(nav)
     rows.append([InlineKeyboardButton(t("btn_budgets", lang), callback_data="bud:list"),
-                 InlineKeyboardButton(t("btn_accounts", lang), callback_data="menu:accounts")])
-    rows.append([InlineKeyboardButton(t("btn_advice_now", lang), callback_data="ask:advice"),
-                 back_button(lang)])
+                 InlineKeyboardButton(t("btn_advice_now", lang), callback_data="ask:advice")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 

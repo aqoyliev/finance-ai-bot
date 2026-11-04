@@ -1,43 +1,49 @@
-"""AI input: receipt photos, PDFs, voice messages, bank SMS and free text -> draft operations -> confirm -> save.
+"""AI input: receipt photos, PDFs, voice messages, bank SMS and free text -> operations saved right away.
 
-Drafts live in FSM data ("ai_drafts", the current one first) while the state is AIDraft.*.
-Manual flows are unaffected: their FSM states are handled by their own handlers, and this module only
-reacts to plain text when no state (or AIDraft.review) is set. It is registered before handlers/users/echo.
+There is no confirmation step. Every recognized operation with an amount is saved at once:
+- the account must be resolved confidently (a valid account id, card digits, "naqd" / "karta"); otherwise
+  the bot asks only "which payment method?" with one button per account, and the answer is applied to every
+  operation of the message that still lacks one (they wait in FSM data under PENDING_KEY, state AIDraft.account);
+- an expense or income without a category goes to the "Other" category (created if needed);
+- an operation without an amount is not saved; the user gets a short "no amount understood" reply.
+The same SMS / photo / file sent again is not saved twice (source_ref); the same amount on the same account a few
+minutes apart is saved with a warning. Budget and credit limit alerts follow the save confirmations.
 
 The extraction model also classifies free text: a question about the user's finances is handed to Ask AI
-(handlers/users/ask_ai.py) instead of becoming a draft. Photos and files always go to extraction.
+(handlers/users/ask_ai.py) instead. Photos and files always go to extraction. Manual flows are unaffected:
+their FSM states are handled by their own handlers, and this module only reacts when no state (or
+AIDraft.account) is set. It is registered after the reply-keyboard handlers and before handlers/users/echo.
 
 Voice messages and audio files need audio input, which only the Gemini provider has: the audio is transcribed
-and extracted in one call into the same draft flow. With AI_PROVIDER=claude they get a localized hint.
+and extracted in one call. With AI_PROVIDER=claude they get a localized hint.
 """
 import logging
+import re
+from html import escape
 from typing import List, Optional
 
 from aiogram import types
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters import Text
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-from keyboards.inline import ai as ai_kb
-from keyboards.inline import finance as kb
 from loader import bot, dp
-from states.finance import AIDraft, AskAI
+from states.finance import AIDraft
 from utils.ai import core as ai
 from utils.ai import parser
 from utils.ai.parser import Draft
 from utils.db_api import finance as db
 from utils.i18n import t
-from utils.misc.money import money_text, parse_amount
-from utils.misc.texts import balance_line, over_limit_warning
+from utils.misc.texts import card_amount, operation_card, over_limit_warning
 from utils.notify_alerts import send_alerts
 
 from . import ask_ai
 from .ai_common import error_text, typing  # noqa: F401  (typing is used here and patched in checks)
-from .finance import Choice
 
 log = logging.getLogger(__name__)
 
-INPUT_STATES = [None, AIDraft.review]  # states in which a new input starts an analysis
-MEDIA_STATES = INPUT_STATES + [AskAI.question]  # a receipt sent in Ask AI mode is still recorded
+INPUT_STATES = [None, AIDraft.account]  # states in which a new input starts an analysis
+PENDING_KEY = "ai_pending"  # operations waiting for the payment method
 
 
 async def download_file(file_id: str) -> bytes:
@@ -45,88 +51,19 @@ async def download_file(file_id: str) -> bytes:
     return (await bot.download_file_by_id(file_id)).getvalue()
 
 
-# ---- Drafts in FSM data ----
+class Replier:
+    """Sends the replies of one input: the first one replaces the 'Analyzing...' status, the rest are new."""
 
-async def load_drafts(state: FSMContext) -> List[Draft]:
-    return [Draft.from_dict(d) for d in (await state.get_data()).get("ai_drafts") or []]
+    def __init__(self, message: types.Message, edit_first: bool):
+        self.message = message
+        self.edit_next = edit_first
 
-
-async def store_drafts(state: FSMContext, drafts: List[Draft]) -> None:
-    await state.update_data(ai_drafts=[d.to_dict() for d in drafts])
-
-
-async def current_draft(state: FSMContext) -> Optional[Draft]:
-    drafts = await load_drafts(state)
-    return drafts[0] if drafts else None
-
-
-async def replace_current(state: FSMContext, draft: Draft) -> None:
-    drafts = await load_drafts(state)
-    drafts[0] = draft
-    await store_drafts(state, drafts)
-
-
-# ---- Rendering ----
-
-def draft_text(draft: Draft, accounts: dict, position: int, total: int, lang: str) -> str:
-    kind = t(f"kind_{draft.kind}_op", lang)
-    amount = money_text(draft.amount_minor, draft.currency or "") if draft.amount_minor else "—"
-    account = accounts.get(draft.account_id)
-    date = parser.occurred_at(draft)
-    lines = [t("ai_draft_title", lang, index=position, total=total, kind=kind),
-             t("op_amount", lang, amount=amount.strip())]
-    if draft.kind == "transfer":
-        target = accounts.get(draft.to_account_id)
-        lines.append(t("op_from", lang, name=account.name if account else "—"))
-        lines.append(t("op_to", lang, name=target.name if target else "—"))
-    else:
-        lines.append(t("op_category", lang, category=draft.category or "—", subcategory=draft.subcategory or "—"))
-        lines.append(t("op_account", lang, name=account.name if account else "—"))
-    lines.append(t("op_date", lang, date=date.strftime("%d.%m.%Y %H:%M") if date else t("ai_date_now", lang)))
-    if draft.note:
-        lines.append(t("op_note", lang, note=draft.note))
-
-    notices = [t(key, lang) for key in dict.fromkeys(draft.notes)]
-    missing = parser.missing_fields(draft)
-    if missing:
-        fields = ", ".join(t(f"ai_field_{name}", lang) for name in missing)
-        notices.append(t("ai_missing", lang, fields=fields))
-    if draft.duplicate:
-        notices.append(t("ai_duplicate", lang))
-    if draft.confidence < parser.LOW_CONFIDENCE:
-        notices.append(t("ai_low_confidence", lang))
-    return "\n".join(lines + ([""] + notices if notices else []))
-
-
-async def render(message: types.Message, state: FSMContext, lang: str, user_id: int, edit: bool = True):
-    """Show the current draft card (edit the given message or send a new one)."""
-    drafts = await load_drafts(state)
-    data = await state.get_data()
-    accounts = {a.id: a for a in await db.list_accounts(user_id)}
-    for draft in drafts:  # an account may have been deactivated meanwhile
-        if draft.account_id not in accounts:
-            draft.account_id = None
-        if draft.to_account_id not in accounts:
-            draft.to_account_id = None
-    draft = await parser.mark_duplicate(user_id, drafts[0], db.now())
-    await store_drafts(state, drafts)
-    await AIDraft.review.set()
-
-    total = data.get("ai_total") or len(drafts)
-    position = total - len(drafts) + 1
-    complete = not parser.missing_fields(draft)
-    all_complete = len(drafts) > 1 and all(not parser.missing_fields(d) for d in drafts)
-    markup = ai_kb.draft_card(lang, draft.kind == "transfer", complete, all_complete, len(drafts) > 1)
-    text = draft_text(draft, accounts, position, total, lang)
-    if edit:
-        await message.edit_text(text, reply_markup=markup)
-    else:
-        await message.answer(text, reply_markup=markup)
-
-
-async def lost(call: types.CallbackQuery, state: FSMContext, lang: str):
-    await state.finish()
-    await call.message.edit_text(t("session_lost", lang), reply_markup=kb.main_menu(lang))
+    async def __call__(self, text: str, markup: Optional[InlineKeyboardMarkup] = None) -> None:
+        if self.edit_next:
+            self.edit_next = False
+            await self.message.edit_text(text, reply_markup=markup)
+        else:
+            await self.message.answer(text, reply_markup=markup)
 
 
 # ---- Input: analysis ----
@@ -135,7 +72,7 @@ async def analyze(message: types.Message, state: FSMContext, lang: str, text: Op
                   media: Optional[ai.Media] = None, source_ref: Optional[str] = None):
     client = ai.get_client()
     if not client.configured:
-        await message.answer(error_text("not_configured", lang), reply_markup=kb.main_menu(lang))
+        await message.answer(error_text("not_configured", lang))
         return
     status = await message.answer(t("ai_analyzing", lang))
     user_id = message.from_user.id
@@ -144,41 +81,165 @@ async def analyze(message: types.Message, state: FSMContext, lang: str, text: Op
         ctx = await parser.load_context(user_id)
         accounts, categories = ctx.as_prompt_data()
         context = ai.build_context(accounts, categories, now.strftime("%Y-%m-%d %H:%M (%A)"),
-                                       conversation=await ask_ai.has_conversation(state))
+                                   conversation=await ask_ai.has_conversation(state))
         async with typing(message.chat.id):
             raw = await ai.extract_operations(context, text, [media] if media else [], client=client)
     except ai.AIError as err:
         log.info("AI input failed: %s", err)
-        await status.edit_text(error_text(err.code, lang), reply_markup=kb.main_menu(lang))
+        await status.edit_text(error_text(err.code, lang))
         return
 
-    if text and not media and parser.intent(raw) == "question":
-        await ask_ai.answer(message, state, lang, text, status=status)
-        return
+    if text and not media:
+        if parser.intent(raw) == "question":
+            await ask_ai.answer(message, state, lang, text, status=status)
+            return
+        if parser.input_type(raw) != "bank_sms":
+            source_ref = None  # typed text may honestly repeat ("coffee 18000" every day); an SMS may not
     drafts = parser.parse_response(raw, ctx, now, source_ref)
     if not drafts:
-        await status.edit_text(t("ai_nothing_found", lang), reply_markup=kb.main_menu(lang))
+        await status.edit_text(t("ai_nothing_found", lang))
         return
     await state.finish()
-    await state.update_data(ai_total=len(drafts))
-    await store_drafts(state, drafts)
-    await render(status, state, lang, user_id)
+    await process(Replier(status, edit_first=True), state, lang, user_id, drafts)
 
+
+async def process(reply: Replier, state: FSMContext, lang: str, user_id: int, drafts: List[Draft]) -> None:
+    """Save what can be saved, report what cannot and ask for the account of the rest."""
+    for draft in drafts:
+        if draft.notes:
+            log.info("AI draft notes: %s", draft.notes)
+    no_amount = [d for d in drafts if not d.amount_minor]
+    drafts = [d for d in drafts if d.amount_minor]
+    no_target = [d for d in drafts if d.kind == "transfer" and not d.to_account_id]
+    drafts = [d for d in drafts if not (d.kind == "transfer" and not d.to_account_id)]
+    for draft in drafts:
+        if draft.kind != "transfer" and not draft.category:
+            draft.category, draft.subcategory = await db.fallback_category(user_id, draft.kind, lang), None
+
+    ready = [d for d in drafts if d.account_id]
+    pending = [d for d in drafts if not d.account_id]
+    saved = await save_drafts(reply, lang, user_id, ready)
+    if no_amount:
+        await reply(t("ai_no_amount", lang))
+    if no_target:
+        await reply(t("ai_no_target", lang))
+    if pending:
+        await ask_account(reply, state, lang, user_id, pending)
+    if saved:
+        await send_alerts(user_id, lang, *saved)
+
+
+async def save_drafts(reply: Replier, lang: str, user_id: int, drafts: List[Draft]) -> List[db.SavedOperation]:
+    """Save complete drafts one by one, each confirmed with its own card."""
+    saved_ops = []
+    for draft in drafts:
+        duplicate = await parser.duplicate_of(user_id, draft, db.now())
+        if duplicate == "source":
+            await reply(t("ai_already_saved", lang))
+            continue
+        try:
+            saved = await parser.save_draft(user_id, draft)
+        except db.FinanceError:
+            await reply(t("ai_save_failed", lang))
+            continue
+        parts = [operation_card(saved, lang)] + over_limit_warning(saved.over_limit, lang)
+        if duplicate == "similar":
+            parts.append(t("ai_duplicate", lang))
+        await reply("\n\n".join(parts))
+        saved_ops.append(saved)
+    return saved_ops
+
+
+# ---- Missing account: "which payment method?" ----
+
+def pending_line(draft: Draft, lang: str) -> str:
+    amount = card_amount(draft.amount_minor, draft.currency, lang) if draft.currency else \
+        f"{draft.amount_minor / 100:,.0f}".replace(",", " ")
+    label = draft.category or ""
+    if draft.subcategory:
+        label = f"{label} › {draft.subcategory}"
+    return f"• {amount}" + (f" — {label}" if label else "")
+
+
+async def ask_account(reply: Replier, state: FSMContext, lang: str, user_id: int, drafts: List[Draft]) -> None:
+    currencies = {d.currency for d in drafts}
+    only = currencies.pop() if len(currencies) == 1 else None
+    accounts = await db.list_accounts(user_id, only) if only else await db.list_accounts(user_id)
+    if not accounts:
+        await reply(t("no_accounts_in_currency", lang, currency=only or "UZS / USD"))
+        return
+    await state.update_data({PENDING_KEY: [d.to_dict() for d in drafts]})
+    await state.set_state(AIDraft.account)
+    markup = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(f"{a.name} ({a.currency})", callback_data=f"ai:acc:{a.id}")] for a in accounts])
+    lines = [t("ai_ask_account", lang)] + [escape(pending_line(d, lang), quote=False) for d in drafts]
+    await reply("\n".join(lines), markup)
+
+
+async def apply_account(reply: Replier, state: FSMContext, lang: str, user_id: int, account) -> None:
+    """Give the chosen account to every waiting operation and save them."""
+    drafts = [Draft.from_dict(d) for d in (await state.get_data()).get(PENDING_KEY) or []]
+    await state.finish()
+    if not drafts:
+        await reply(t("session_lost", lang))
+        return
+    usable, failed = [], 0
+    for draft in drafts:
+        if draft.currency and draft.currency != account.currency:
+            failed += 1
+            continue
+        draft.account_id, draft.currency = account.id, account.currency
+        usable.append(draft)
+    saved = await save_drafts(reply, lang, user_id, usable)
+    if failed:
+        await reply(t("ai_save_failed", lang))
+    if saved:
+        await send_alerts(user_id, lang, *saved)
+
+
+@dp.callback_query_handler(Text(startswith="ai:acc:"), state="*")
+async def choose_account(call: types.CallbackQuery, state: FSMContext, lang: str):
+    await call.answer()
+    account = await db.get_account(call.from_user.id, int(call.data.split(":")[2]))
+    if account is None or await state.get_state() != AIDraft.account.state:
+        await state.finish()
+        await call.message.edit_text(t("session_lost", lang))
+        return
+    await apply_account(Replier(call.message, edit_first=True), state, lang, call.from_user.id, account)
+
+
+async def typed_account(message: types.Message, state: FSMContext, lang: str) -> bool:
+    """While an account is asked for, a short typed name ("naqd", "uob") answers it. True if handled."""
+    text = message.text or ""
+    if await state.get_state() != AIDraft.account.state or re.search(r"\d", text) or len(text) > 40:
+        return False
+    ctx = await parser.load_context(message.from_user.id)
+    match = parser.match_account(ctx, hint=text)
+    account = await db.get_account(message.from_user.id, match.id) if match else None
+    if account is None:
+        return False
+    await apply_account(Replier(message, edit_first=False), state, lang, message.from_user.id, account)
+    return True
+
+
+# ---- Input handlers ----
 
 @dp.message_handler(lambda m: not (m.text or "").startswith("/"), state=INPUT_STATES,
                     content_types=types.ContentTypes.TEXT)
 async def text_input(message: types.Message, state: FSMContext, lang: str):
+    if await typed_account(message, state, lang):
+        return
     # Forwarded bank SMS / notifications are plain text as well; the fingerprint catches re-sends
     await analyze(message, state, lang, text=message.text, source_ref=parser.fingerprint(message.text))
 
 
-@dp.message_handler(state=MEDIA_STATES, content_types=types.ContentTypes.PHOTO)
+@dp.message_handler(state=INPUT_STATES, content_types=types.ContentTypes.PHOTO)
 async def photo_input(message: types.Message, state: FSMContext, lang: str):
     photo = message.photo[-1]  # largest size
     await analyze_file(message, state, lang, photo.file_id, photo.file_unique_id, "image/jpeg")
 
 
-@dp.message_handler(state=MEDIA_STATES, content_types=types.ContentTypes.DOCUMENT)
+@dp.message_handler(state=INPUT_STATES, content_types=types.ContentTypes.DOCUMENT)
 async def document_input(message: types.Message, state: FSMContext, lang: str):
     document = message.document
     mime = (document.mime_type or "").lower()
@@ -192,13 +253,13 @@ async def document_input(message: types.Message, state: FSMContext, lang: str):
                        size=document.file_size)
 
 
-@dp.message_handler(state=MEDIA_STATES, content_types=[types.ContentType.VOICE, types.ContentType.AUDIO])
+@dp.message_handler(state=INPUT_STATES, content_types=[types.ContentType.VOICE, types.ContentType.AUDIO])
 async def voice_input(message: types.Message, state: FSMContext, lang: str):
     audio = message.voice or message.audio
     await audio_input(message, state, lang, audio, audio.mime_type or "audio/ogg")  # voice notes are OGG/Opus
 
 
-@dp.message_handler(state=MEDIA_STATES, content_types=types.ContentTypes.VIDEO_NOTE)
+@dp.message_handler(state=INPUT_STATES, content_types=types.ContentTypes.VIDEO_NOTE)
 async def video_note_input(message: types.Message, state: FSMContext, lang: str):
     await message.answer(t("ai_video_note_unsupported", lang))
 
@@ -207,7 +268,7 @@ async def audio_input(message: types.Message, state: FSMContext, lang: str, audi
     """Voice/audio -> Gemini audio input (transcribe + extract in one call), within the size/duration limits."""
     client = ai.get_client()
     if not client.configured:
-        await message.answer(error_text("not_configured", lang), reply_markup=kb.main_menu(lang))
+        await message.answer(error_text("not_configured", lang))
         return
     if not client.supports_audio:
         await message.answer(t("ai_voice_needs_gemini", lang))
@@ -229,7 +290,7 @@ async def analyze_file(message: types.Message, state: FSMContext, lang: str, fil
                        mime: str, size: Optional[int] = None):
     client = ai.get_client()
     if not client.configured:
-        await message.answer(error_text("not_configured", lang), reply_markup=kb.main_menu(lang))
+        await message.answer(error_text("not_configured", lang))
         return
     if size and size > client.media_limit(mime):
         await message.answer(error_text("too_large", lang))
@@ -243,322 +304,3 @@ async def analyze_file(message: types.Message, state: FSMContext, lang: str, fil
     # A caption ("taxi, uob card") is passed along as a hint
     await analyze(message, state, lang, text=message.caption, media=ai.Media(data, mime),
                   source_ref=parser.fingerprint(f"file:{unique_id}"))
-
-
-# ---- Save / skip / cancel ----
-
-def saved_summary(draft: Draft, saved: db.SavedOperation, lang: str) -> str:
-    account_names = {a.id: a.name for a in saved.accounts}
-    amount = money_text(draft.amount_minor, draft.currency)
-    if draft.kind == "transfer":
-        summary = f"{amount} · {account_names.get(draft.account_id)} → {account_names.get(draft.to_account_id)}"
-    else:
-        category = draft.category + (f" / {draft.subcategory}" if draft.subcategory else "")
-        summary = f"{amount} · {category} · {account_names.get(draft.account_id)}"
-    lines = [t("ai_saved", lang, summary=summary)] + [balance_line(a, lang) for a in saved.accounts]
-    return "\n".join(lines + over_limit_warning(saved.over_limit, lang))
-
-
-async def next_or_finish(call: types.CallbackQuery, state: FSMContext, lang: str, result: str,
-                         saved: Optional[db.SavedOperation] = None):
-    """Drop the current draft, then show the next one (as a new message) or finish.
-
-    Limit alerts for a just saved operation go out before the next draft is shown."""
-    drafts = (await load_drafts(state))[1:]
-    if not drafts:
-        await state.finish()
-        await call.message.edit_text(result, reply_markup=kb.main_menu(lang))
-        if saved:
-            await send_alerts(call.from_user.id, lang, saved)
-        return
-    await store_drafts(state, drafts)
-    await call.message.edit_text(result)
-    if saved:
-        await send_alerts(call.from_user.id, lang, saved)
-    await render(call.message, state, lang, call.from_user.id, edit=False)
-
-
-@dp.callback_query_handler(Text(equals="ai:save"), state=AIDraft.states)
-async def save(call: types.CallbackQuery, state: FSMContext, lang: str):
-    await call.answer()
-    draft = await current_draft(state)
-    if draft is None:
-        await lost(call, state, lang)
-        return
-    if parser.missing_fields(draft):
-        await render(call.message, state, lang, call.from_user.id)
-        return
-    try:
-        saved = await parser.save_draft(call.from_user.id, draft)
-    except db.FinanceError:
-        draft.account_id = draft.to_account_id = None
-        await replace_current(state, draft)
-        await call.message.answer(t("ai_save_failed", lang))
-        await render(call.message, state, lang, call.from_user.id, edit=False)
-        return
-    await next_or_finish(call, state, lang, saved_summary(draft, saved, lang), saved)
-
-
-@dp.callback_query_handler(Text(equals="ai:saveall"), state=AIDraft.states)
-async def save_all(call: types.CallbackQuery, state: FSMContext, lang: str):
-    await call.answer()
-    drafts = await load_drafts(state)
-    if not drafts:
-        await lost(call, state, lang)
-        return
-    results, remaining, saved_ops = [], [], []
-    for draft in drafts:
-        try:
-            if parser.missing_fields(draft):
-                raise db.InvalidValue()
-            saved = await parser.save_draft(call.from_user.id, draft)
-        except db.FinanceError:
-            remaining.append(draft)
-            continue
-        saved_ops.append(saved)
-        results.append(saved_summary(draft, saved, lang))
-    if not remaining:
-        await state.finish()
-        await call.message.edit_text("\n\n".join(results), reply_markup=kb.main_menu(lang))
-        await send_alerts(call.from_user.id, lang, *saved_ops)
-        return
-    await state.update_data(ai_total=len(remaining))
-    await store_drafts(state, remaining)
-    await call.message.edit_text("\n\n".join(results + [t("ai_save_failed", lang)]))
-    await send_alerts(call.from_user.id, lang, *saved_ops)
-    await render(call.message, state, lang, call.from_user.id, edit=False)
-
-
-@dp.callback_query_handler(Text(equals="ai:skip"), state=AIDraft.states)
-async def skip(call: types.CallbackQuery, state: FSMContext, lang: str):
-    await call.answer()
-    if await current_draft(state) is None:
-        await lost(call, state, lang)
-        return
-    await next_or_finish(call, state, lang, t("ai_skipped", lang))
-
-
-@dp.callback_query_handler(Text(equals="ai:cancel"), state="*")
-async def cancel(call: types.CallbackQuery, state: FSMContext, lang: str):
-    await call.answer()
-    await state.finish()
-    await call.message.edit_text(t("cancelled", lang), reply_markup=kb.main_menu(lang))
-
-
-@dp.callback_query_handler(Text(equals=ai_kb.BACK), state=AIDraft.states)
-async def back(call: types.CallbackQuery, state: FSMContext, lang: str):
-    await call.answer()
-    if await current_draft(state) is None:
-        await lost(call, state, lang)
-        return
-    await render(call.message, state, lang, call.from_user.id)
-
-
-# ---- Edit: amount and date (typed) ----
-
-@dp.callback_query_handler(Text(equals="ai:edit:amount"), state=AIDraft.states)
-async def ask_amount(call: types.CallbackQuery, state: FSMContext, lang: str):
-    await call.answer()
-    if await current_draft(state) is None:
-        await lost(call, state, lang)
-        return
-    await AIDraft.amount.set()
-    await call.message.edit_text(t("ask_new_amount", lang), reply_markup=ai_kb.back_only(lang))
-
-
-@dp.message_handler(state=AIDraft.amount)
-async def typed_amount(message: types.Message, state: FSMContext, lang: str):
-    amount = parse_amount(message.text or "")
-    draft = await current_draft(state)
-    if draft is None:
-        await state.finish()
-        await message.answer(t("session_lost", lang), reply_markup=kb.main_menu(lang))
-        return
-    if amount is None:
-        await message.answer(t("bad_amount", lang))
-        return
-    draft.amount_minor = amount
-    draft.notes = [n for n in draft.notes if n != "ai_note_amount"]
-    await replace_current(state, draft)
-    await render(message, state, lang, message.from_user.id, edit=False)
-
-
-@dp.callback_query_handler(Text(equals="ai:edit:date"), state=AIDraft.states)
-async def ask_date(call: types.CallbackQuery, state: FSMContext, lang: str):
-    await call.answer()
-    if await current_draft(state) is None:
-        await lost(call, state, lang)
-        return
-    await AIDraft.date.set()
-    await call.message.edit_text(t("ai_ask_date", lang), reply_markup=ai_kb.back_only(lang))
-
-
-@dp.message_handler(state=AIDraft.date)
-async def typed_date(message: types.Message, state: FSMContext, lang: str):
-    draft = await current_draft(state)
-    if draft is None:
-        await state.finish()
-        await message.answer(t("session_lost", lang), reply_markup=kb.main_menu(lang))
-        return
-    parsed = parser.parse_datetime(message.text, db.now())
-    if parsed is None:
-        await message.answer(t("ai_bad_date", lang))
-        return
-    draft.occurred_at = parsed.isoformat()
-    await replace_current(state, draft)
-    await render(message, state, lang, message.from_user.id, edit=False)
-
-
-# ---- Edit: choices ----
-
-@dp.callback_query_handler(Text(equals="ai:edit:kind"), state=AIDraft.states)
-async def ask_kind(call: types.CallbackQuery, state: FSMContext, lang: str):
-    await call.answer()
-    await call.message.edit_text(t("ai_ask_kind", lang), reply_markup=ai_kb.kinds(lang))
-
-
-@dp.callback_query_handler(Text(startswith="ai:kind:"), state=AIDraft.states)
-async def set_kind(call: types.CallbackQuery, state: FSMContext, lang: str):
-    await call.answer()
-    draft = await current_draft(state)
-    kind = call.data.split(":")[2]
-    if draft is None or kind not in parser.KINDS:
-        await lost(call, state, lang)
-        return
-    if kind != draft.kind:
-        ctx = await parser.load_context(call.from_user.id)
-        draft.kind = kind
-        draft.category, draft.subcategory = parser.match_category(ctx, kind, draft.category, draft.subcategory)
-        if kind != "transfer":
-            draft.to_account_id = None
-        await replace_current(state, draft)
-    await render(call.message, state, lang, call.from_user.id)
-
-
-@dp.callback_query_handler(Text(equals="ai:edit:cur"), state=AIDraft.states)
-async def ask_currency(call: types.CallbackQuery, state: FSMContext, lang: str):
-    await call.answer()
-    await call.message.edit_text(t("ask_currency", lang), reply_markup=kb.currencies(lang, prefix="ai:cur"))
-
-
-@dp.callback_query_handler(Text(startswith="ai:cur:"), state=AIDraft.states)
-async def set_currency(call: types.CallbackQuery, state: FSMContext, lang: str):
-    await call.answer()
-    draft = await current_draft(state)
-    currency = call.data.split(":")[2]
-    if draft is None or currency not in db.CURRENCIES:
-        await lost(call, state, lang)
-        return
-    if currency != draft.currency:
-        draft.currency = currency
-        accounts = {a.id: a for a in await db.list_accounts(call.from_user.id, currency)}
-        if draft.account_id not in accounts:
-            draft.account_id = None
-        if draft.to_account_id not in accounts:
-            draft.to_account_id = None
-        draft.notes = [n for n in draft.notes if n not in ("ai_note_currency", "ai_note_account_currency")]
-        await replace_current(state, draft)
-    await render(call.message, state, lang, call.from_user.id)
-
-
-async def show_accounts(call: types.CallbackQuery, state: FSMContext, lang: str, target: bool):
-    draft = await current_draft(state)
-    if draft is None:
-        await lost(call, state, lang)
-        return
-    accounts = await db.list_accounts(call.from_user.id, draft.currency)
-    if target:
-        accounts = [a for a in accounts if a.id != draft.account_id]
-    if not accounts:
-        await call.message.edit_text(t("no_accounts_in_currency", lang, currency=draft.currency or "—"),
-                                     reply_markup=ai_kb.back_only(lang))
-        return
-    labels = [Choice(a.id, f"{a.name} ({a.currency})") for a in accounts]
-    key = "ai_ask_to_account" if target else "ask_new_account"
-    await call.message.edit_text(
-        t(key, lang, currency=draft.currency or "UZS / USD"),
-        reply_markup=kb.choices(labels, "ai:to" if target else "ai:acc", lang, extra=[ai_kb.back_to_draft(lang)]))
-
-
-@dp.callback_query_handler(Text(equals="ai:edit:acc"), state=AIDraft.states)
-async def ask_account(call: types.CallbackQuery, state: FSMContext, lang: str):
-    await call.answer()
-    await show_accounts(call, state, lang, target=False)
-
-
-@dp.callback_query_handler(Text(equals="ai:edit:to"), state=AIDraft.states)
-async def ask_target(call: types.CallbackQuery, state: FSMContext, lang: str):
-    await call.answer()
-    await show_accounts(call, state, lang, target=True)
-
-
-@dp.callback_query_handler(Text(startswith=["ai:acc:", "ai:to:"]), state=AIDraft.states)
-async def set_account(call: types.CallbackQuery, state: FSMContext, lang: str):
-    await call.answer()
-    draft = await current_draft(state)
-    _, field, account_id = call.data.split(":")
-    account = await db.get_account(call.from_user.id, int(account_id))
-    if draft is None or account is None:
-        await lost(call, state, lang)
-        return
-    if draft.currency and account.currency != draft.currency:
-        await render(call.message, state, lang, call.from_user.id)
-        return
-    draft.currency = account.currency
-    if field == "acc":
-        draft.account_id = account.id
-        if draft.to_account_id == account.id:
-            draft.to_account_id = None
-    else:
-        draft.to_account_id = account.id if account.id != draft.account_id else None
-    draft.notes = [n for n in draft.notes if n != "ai_note_account_currency"]
-    await replace_current(state, draft)
-    await render(call.message, state, lang, call.from_user.id)
-
-
-@dp.callback_query_handler(Text(equals="ai:edit:cat"), state=AIDraft.states)
-async def ask_category(call: types.CallbackQuery, state: FSMContext, lang: str):
-    await call.answer()
-    draft = await current_draft(state)
-    if draft is None or draft.kind == "transfer":
-        await lost(call, state, lang)
-        return
-    categories = await db.list_categories(call.from_user.id, draft.kind)
-    await call.message.edit_text(t("ask_new_category", lang),
-                                 reply_markup=kb.choices(categories, "ai:cat", lang,
-                                                         extra=[ai_kb.back_to_draft(lang)]))
-
-
-@dp.callback_query_handler(Text(startswith="ai:cat:"), state=AIDraft.states)
-async def set_category(call: types.CallbackQuery, state: FSMContext, lang: str):
-    await call.answer()
-    draft = await current_draft(state)
-    category = await db.get_category(call.from_user.id, int(call.data.split(":")[2]))
-    if draft is None or category is None or category.kind != draft.kind:
-        await lost(call, state, lang)
-        return
-    draft.category, draft.subcategory = category.name, None
-    await replace_current(state, draft)
-    if draft.kind == "expense":
-        await state.update_data(ai_category_id=category.id)
-        subcategories = await db.list_subcategories(category.id)
-        await call.message.edit_text(t("ask_subcategory", lang),
-                                     reply_markup=kb.subcategories(subcategories, lang, prefix="ai:sub"))
-        return
-    await render(call.message, state, lang, call.from_user.id)
-
-
-@dp.callback_query_handler(Text(startswith="ai:sub:"), state=AIDraft.states)
-async def set_subcategory(call: types.CallbackQuery, state: FSMContext, lang: str):
-    await call.answer()
-    draft = await current_draft(state)
-    if draft is None:
-        await lost(call, state, lang)
-        return
-    subcategory_id = int(call.data.split(":")[2])
-    subcategory = await db.get_subcategory(call.from_user.id, subcategory_id) if subcategory_id else None
-    if subcategory is not None and subcategory.category_id != (await state.get_data()).get("ai_category_id"):
-        subcategory = None
-    draft.subcategory = subcategory.name if subcategory else None
-    await replace_current(state, draft)
-    await render(call.message, state, lang, call.from_user.id)

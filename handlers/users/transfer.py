@@ -1,14 +1,15 @@
+"""Manual transfer between own accounts (/transfer); a transfer to a credit card repays its debt."""
 from aiogram import types
 from aiogram.dispatcher import FSMContext
-from aiogram.dispatcher.filters import Text
+from aiogram.dispatcher.filters import Command, Text
 
 from keyboards.inline import finance as kb
 from loader import dp
 from states.finance import TransferForm
 from utils.db_api import finance as db
 from utils.i18n import t
-from utils.misc.money import money_text, parse_amount
-from utils.misc.texts import balance_line
+from utils.misc.money import parse_amount
+from utils.misc.texts import operation_card, over_limit_warning
 from utils.notify_alerts import send_alerts
 
 from .finance import Choice, session_lost
@@ -18,16 +19,15 @@ def account_choices(accounts):
     return [Choice(a.id, f"{a.name} ({a.currency})") for a in accounts]
 
 
-@dp.callback_query_handler(Text(equals="menu:transfer"), state="*")
-async def start_transfer(call: types.CallbackQuery, state: FSMContext, lang: str):
-    await call.answer()
+@dp.message_handler(Command("transfer"), state="*")
+async def start_transfer(message: types.Message, state: FSMContext, lang: str):
     await state.finish()
-    accounts = await db.list_accounts(call.from_user.id)
+    accounts = await db.list_accounts(message.from_user.id)
     if len(accounts) < 2:
-        await call.message.edit_text(t("transfer_need_two", lang), reply_markup=kb.main_menu(lang))
+        await message.answer(t("transfer_need_two", lang))
         return
-    await call.message.edit_text(t("transfer_from", lang),
-                                 reply_markup=kb.choices(account_choices(accounts), "trf:from", lang))
+    await message.answer(t("transfer_from", lang),
+                         reply_markup=kb.choices(account_choices(accounts), "trf:from", lang))
 
 
 @dp.callback_query_handler(Text(startswith="trf:from:"), state="*")
@@ -40,8 +40,7 @@ async def choose_source(call: types.CallbackQuery, state: FSMContext, lang: str)
     # Only accounts of the same currency can receive the money
     targets = [a for a in await db.list_accounts(call.from_user.id, source.currency) if a.id != source.id]
     if not targets:
-        await call.message.edit_text(t("transfer_no_target", lang, currency=source.currency),
-                                     reply_markup=kb.main_menu(lang))
+        await call.message.edit_text(t("transfer_no_target", lang, currency=source.currency))
         return
     await state.update_data(transfer_from=source.id)
     await call.message.edit_text(t("transfer_to", lang, name=source.name),
@@ -67,13 +66,9 @@ async def save_transfer(message: types.Message, state: FSMContext, lang: str, am
     try:
         saved = await db.record_transfer(user_id, data["transfer_from"], data["transfer_to"], amount)
     except (KeyError, db.FinanceError):
-        await send(t("transfer_failed", lang), reply_markup=kb.main_menu(lang))
+        await send(t("transfer_failed", lang))
         return
-    source, target = saved.accounts
-    key = "repayment_saved" if target.kind == "credit" else "transfer_saved"
-    text = t(key, lang, amount=money_text(amount, source.currency), source=source.name, target=target.name)
-    lines = [text, "", t("balances", lang), balance_line(source, lang), balance_line(target, lang)]
-    await send("\n".join(lines), reply_markup=kb.main_menu(lang))
+    await send("\n\n".join([operation_card(saved, lang)] + over_limit_warning(saved.over_limit, lang)))
     await send_alerts(user_id, lang, saved)
 
 

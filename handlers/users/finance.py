@@ -1,8 +1,13 @@
+"""Manual expense / income entry (/expense, /income) and the History screen (Settings -> History).
+
+Typing or speaking an operation (handlers/users/ai_input.py) is the main way to add one; these flows stay
+for exact manual entry and for a purchase paid from several accounts.
+"""
 from collections import namedtuple
 
 from aiogram import types
 from aiogram.dispatcher import FSMContext
-from aiogram.dispatcher.filters import Text
+from aiogram.dispatcher.filters import Command, Text
 
 from keyboards.inline import finance as kb
 from keyboards.inline import operations as op_kb
@@ -10,8 +15,8 @@ from loader import dp
 from states.finance import FinanceForm
 from utils.db_api import finance as db
 from utils.i18n import t
-from utils.misc.money import money_text, parse_amount
-from utils.misc.texts import operation_line, over_limit_warning
+from utils.misc.money import parse_amount
+from utils.misc.texts import operation_card, operation_line, over_limit_warning
 from utils.notify_alerts import send_alerts
 
 Choice = namedtuple("Choice", "id name")  # item shape expected by kb.choices
@@ -19,7 +24,7 @@ Choice = namedtuple("Choice", "id name")  # item shape expected by kb.choices
 
 async def session_lost(call: types.CallbackQuery, state: FSMContext, lang: str):
     await state.finish()
-    await call.message.edit_text(t("session_lost", lang), reply_markup=kb.main_menu(lang))
+    await call.message.edit_text(t("session_lost", lang))
 
 
 async def ask_amount(message: types.Message, lang: str, split: bool = False):
@@ -36,15 +41,14 @@ async def ask_currency(message: types.Message, amount_minor: int, state: FSMCont
 
 # ---- Expense / income ----
 
-@dp.callback_query_handler(Text(equals=["menu:expense", "menu:income"]), state="*")
-async def choose_kind(call: types.CallbackQuery, state: FSMContext, lang: str):
-    await call.answer()
-    kind = call.data.split(":")[1]
+@dp.message_handler(Command(["expense", "income"]), state="*")
+async def choose_kind(message: types.Message, state: FSMContext, lang: str):
+    kind = message.get_command(pure=True)
     await state.finish()
     await state.update_data(kind=kind)
-    categories = await db.list_categories(call.from_user.id, kind)
+    categories = await db.list_categories(message.from_user.id, kind)
     title = t("ask_expense_category" if kind == "expense" else "ask_income_category", lang)
-    await call.message.edit_text(title, reply_markup=kb.choices(categories, "cat", lang))
+    await message.answer(title, reply_markup=kb.choices(categories, "cat", lang))
 
 
 @dp.callback_query_handler(Text(startswith="cat:"), state="*")
@@ -107,8 +111,7 @@ async def choose_currency(call: types.CallbackQuery, state: FSMContext, lang: st
     accounts = await db.list_accounts(call.from_user.id, currency)
     if not accounts:
         await state.finish()
-        await call.message.edit_text(t("no_accounts_in_currency", lang, currency=currency),
-                                     reply_markup=kb.main_menu(lang))
+        await call.message.edit_text(t("no_accounts_in_currency", lang, currency=currency))
         return
     labels = [Choice(a.id, f"{a.name} ({a.currency})") for a in accounts]
     await call.message.edit_text(t("ask_account", lang, currency=currency),
@@ -130,25 +133,22 @@ async def choose_account(call: types.CallbackQuery, state: FSMContext, lang: str
             category=data.get("category"), subcategory=data.get("subcategory"), group_id=data.get("group_id"))
     except db.AccountNotFound:
         await state.finish()
-        await call.message.edit_text(t("account_not_found", lang), reply_markup=kb.main_menu(lang))
+        await call.message.edit_text(t("account_not_found", lang))
         return
     except db.CurrencyMismatch as err:
         await state.finish()
-        await call.message.edit_text(
-            t("currency_mismatch", lang, account_currency=err.account_currency, currency=currency),
-            reply_markup=kb.main_menu(lang))
+        await call.message.edit_text(t("currency_mismatch", lang, account_currency=err.account_currency,
+                                       currency=currency))
         return
 
     await state.update_data(amount_minor=None, group_id=saved.group_id)
-    warnings = over_limit_warning(saved.over_limit, lang)
+    text = "\n\n".join([operation_card(saved, lang)] + over_limit_warning(saved.over_limit, lang))
     if kind == "expense":
-        text = t("expense_saved", lang, amount=money_text(amount, currency), category=data.get("category"),
-                 subcategory=data.get("subcategory") or "—")
-        await call.message.edit_text("\n\n".join([text] + warnings), reply_markup=kb.split_or_finish(lang))
+        # A purchase can be paid from several accounts: offer another part
+        await call.message.edit_text(f"{text}\n\n{t('ask_split_more', lang)}", reply_markup=kb.split_or_finish(lang))
     else:
         await state.finish()
-        text = t("income_saved", lang, amount=money_text(amount, currency), category=data.get("category"))
-        await call.message.edit_text("\n\n".join([text] + warnings), reply_markup=kb.main_menu(lang))
+        await call.message.edit_text(text)
     await send_alerts(call.from_user.id, lang, saved)
 
 
@@ -163,19 +163,25 @@ async def split_more(call: types.CallbackQuery, state: FSMContext, lang: str):
 
 @dp.callback_query_handler(Text(equals="split:finish"), state="*")
 async def split_finish(call: types.CallbackQuery, state: FSMContext, lang: str):
+    """Keep the saved card, drop the question and its buttons."""
     await call.answer()
     await state.finish()
-    await call.message.edit_text(t("operation_saved", lang), reply_markup=kb.main_menu(lang))
+    text = call.message.html_text or ""
+    question = t("ask_split_more", lang)
+    if text.endswith(question):
+        await call.message.edit_text(text[:-len(question)].rstrip())
+    else:
+        await call.message.edit_reply_markup(None)
 
 
 @dp.callback_query_handler(Text(equals="cancel"), state="*")
 async def cancel(call: types.CallbackQuery, state: FSMContext, lang: str):
     await call.answer()
     await state.finish()
-    await call.message.edit_text(t("cancelled", lang), reply_markup=kb.main_menu(lang))
+    await call.message.edit_text(t("cancelled", lang))
 
 
-# ---- History ----
+# ---- History (Settings -> History) ----
 
 @dp.callback_query_handler(Text(equals="menu:history"), state="*")
 async def show_history(call: types.CallbackQuery, state: FSMContext, lang: str):
@@ -183,7 +189,7 @@ async def show_history(call: types.CallbackQuery, state: FSMContext, lang: str):
     await state.finish()
     views = await db.recent_operations(call.from_user.id)
     if not views:
-        await call.message.edit_text(t("history_empty", lang), reply_markup=kb.main_menu(lang))
+        await call.message.edit_text(t("history_empty", lang), reply_markup=kb.back_to_settings(lang))
         return
     lines = [t("history_title", lang)] + [operation_line(v, lang) for v in views]
     buttons = [(v.tx.id, operation_line(v, lang, escape=False)) for v in views]

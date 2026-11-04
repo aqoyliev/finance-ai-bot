@@ -4,7 +4,8 @@ from .accounts import (available_credit, create_account, deactivate_account, deb
 from .alerts import Alert, check_alerts  # noqa: F401
 from .budgets import (budget_usages, get_budget, list_budgets, remove_budget,  # noqa: F401
                       set_budget)
-from .categories import get_category, get_subcategory, list_categories, list_subcategories  # noqa: F401
+from .categories import (fallback_category, get_category, get_subcategory, list_categories,  # noqa: F401
+                         list_subcategories)
 from .common import (ACCOUNT_KINDS, CURRENCIES, OPERATION_KINDS, TZ, AccountNotFound,  # noqa: F401
                      CurrencyMismatch, FinanceError, InvalidValue, OperationNotFound, SameAccount, now)
 from .operations import (Leg, OperationView, SavedOperation, delete_operation, find_similar,  # noqa: F401

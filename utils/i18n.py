@@ -43,22 +43,31 @@ TEXTS = {
         "en": "Too many requests! Please wait a moment.",
     },
     "start": {
-        "uz": "<b>MOLIYA BOTI</b>\n\nAmalni tanlang.\nMaosh kunini belgilash: /salaryday 5\n"
-              "Dollar kursini belgilash: /rate 1 USD 12700 UZS",
-        "ru": "<b>ФИНАНСОВЫЙ БОТ</b>\n\nВыберите действие.\nДень зарплаты: /salaryday 5\n"
-              "Курс доллара: /rate 1 USD 12700 UZS",
-        "en": "<b>FINANCE BOT</b>\n\nChoose an action.\nSet your salary day: /salaryday 5\n"
-              "Set the USD rate: /rate 1 USD 12700 UZS",
+        "uz": "<b>MOLIYA BOTI</b>\n\nXarajat yoki daromadni shunchaki yozing yoki ovozli xabar yuboring, masalan: "
+              "«taksi 25000 naqd». Chek rasmi yoki bank SMS'ini ham yuborishingiz mumkin — bot darhol saqlaydi.\n\n"
+              "Pastdagi tugmalar: 📊 Hisobot, 💳 Balans, ⚙️ Sozlamalar.\n"
+              "Maosh kuni: /salaryday 5 · Dollar kursi: /rate 1 USD 12700 UZS",
+        "ru": "<b>ФИНАНСОВЫЙ БОТ</b>\n\nПросто напишите или наговорите расход или доход, например: "
+              "«такси 25000 наличными». Можно прислать фото чека или банковское SMS — бот сразу сохранит.\n\n"
+              "Кнопки внизу: 📊 Отчёт, 💳 Баланс, ⚙️ Настройки.\n"
+              "День зарплаты: /salaryday 5 · Курс доллара: /rate 1 USD 12700 UZS",
+        "en": "<b>FINANCE BOT</b>\n\nJust type or say an expense or income, e.g. \"taxi 25000 cash\". "
+              "You can also send a receipt photo or a bank SMS — the bot saves it right away.\n\n"
+              "Buttons below: 📊 Report, 💳 Balance, ⚙️ Settings.\n"
+              "Salary day: /salaryday 5 · USD rate: /rate 1 USD 12700 UZS",
     },
     "bot_started": {"uz": "Bot ishga tushdi", "ru": "Бот запущен", "en": "Bot has started"},
-    "cmd_start": {"uz": "Asosiy menyu", "ru": "Главное меню", "en": "Open the main menu"},
+    "cmd_start": {"uz": "Boshlash", "ru": "Начало", "en": "Start"},
+    "cmd_expense": {"uz": "Xarajatni qo'lda kiritish", "ru": "Ввести расход вручную", "en": "Add an expense manually"},
+    "cmd_income": {"uz": "Daromadni qo'lda kiritish", "ru": "Ввести доход вручную", "en": "Add an income manually"},
+    "cmd_transfer": {"uz": "Hisoblar orasida o'tkazma", "ru": "Перевод между счетами",
+                     "en": "Transfer between accounts"},
     "cmd_salaryday": {"uz": "Maosh kuni, masalan /salaryday 5", "ru": "День зарплаты, например /salaryday 5",
                       "en": "Set salary day, e.g. /salaryday 5"},
     "cmd_rate": {"uz": "Dollar kursi, masalan /rate 1 USD 12700 UZS",
                  "ru": "Курс доллара, например /rate 1 USD 12700 UZS",
                  "en": "Set USD rate, e.g. /rate 1 USD 12700 UZS"},
     "cmd_help": {"uz": "Yordam", "ru": "Помощь", "en": "Help"},
-    "main_menu": {"uz": "Asosiy menyu:", "ru": "Главное меню:", "en": "Main menu:"},
     "language_changed": {
         "uz": "Til o'zgartirildi: o'zbekcha.",
         "ru": "Язык изменён: русский.",
@@ -66,96 +75,90 @@ TEXTS = {
     },
     "help": {
         "uz": "<b>Buyruqlar</b>\n"
-              "/start — asosiy menyu\n"
+              "/start — boshlash\n"
+              "/expense — xarajatni qo'lda kiritish (xaridni bir nechta hisobdan to'lash mumkin)\n"
+              "/income — daromadni qo'lda kiritish\n"
+              "/transfer — o'z hisoblaringiz orasida o'tkazma, kredit kartani so'ndirish\n"
               "/salaryday 5 — moliyaviy oy boshlanadigan kun (1–28)\n"
               "/rate 1 USD 12700 UZS — dollar kursi\n"
               "/help — yordam\n\n"
-              "<b>Menyu</b>\n"
-              "➖ Xarajat / ➕ Daromad — amalni yozish (xaridni bir nechta hisobdan to'lash mumkin)\n"
-              "🔁 O'tkazma — o'z hisoblaringiz orasida pul o'tkazish, kredit kartani so'ndirish\n"
-              "💳 Hisoblar — hisoblar, kredit limiti va qarz; qo'shish, tahrirlash, o'chirish\n"
-              "📊 Hisobot — moliyaviy oy: daromad, xarajat, kategoriyalar bo'yicha diagramma va oldingi davr "
-              "bilan solishtirish; kategoriyani bosing — subkategoriyalar; ◀ ▶ — boshqa davrlar "
-              "(o'tkazmalar hisobga olinmaydi)\n"
-              "🧾 Tarix — so'nggi amallar; amalni ochib tahrirlash yoki o'chirish mumkin\n"
-              "🤖 AI'dan so'rash — moliyangiz haqida savol bering\n"
-              "⚙️ Sozlamalar — hisoblar, byudjetlar, AI maslahatlari va til\n\n"
+              "<b>🤖 Amal qo'shish</b>\n"
+              "Shunchaki yozing yoki ayting: «taksi 25000 naqd», «kofe 18 ming», «maosh 12m hamkorbankka». "
+              "Chek rasmi, PDF yoki bank SMS'ini ham yuborish mumkin. Bot amalni darhol saqlaydi: to'lov usuli "
+              "aniq bo'lmasa, faqat shuni so'raydi; kategoriya aniq bo'lmasa, «Boshqa» ga yoziladi. "
+              "Ovozli xabar 2 daqiqagacha bo'lishi kerak va faqat Google Gemini bilan ishlaydi. "
+              "Rasm, ovoz va matn tahlil uchun AI xizmatiga (Google Gemini yoki Anthropic Claude) yuboriladi.\n\n"
+              "<b>Pastdagi tugmalar</b>\n"
+              "📊 Hisobot — moliyaviy oy: daromad, xarajat, kategoriyalar va oldingi davr bilan solishtirish; "
+              "kategoriyani bosing — subkategoriyalar; ◀ ▶ — boshqa davrlar (o'tkazmalar hisobga olinmaydi)\n"
+              "💳 Balans — hisoblar qoldig'i, kredit limiti va qarz\n"
+              "⚙️ Sozlamalar — hisoblar, byudjetlar, tarix (amalni tahrirlash yoki o'chirish), AI maslahatlari "
+              "va til\n\n"
               "<b>🎯 Byudjetlar va ogohlantirishlar</b>\n"
               "Sozlamalar → Byudjetlar: kategoriya uchun oylik limit. Limitning yoki kredit karta limitining "
               "80% va 100% ga yetganda bot xabar yuboradi (har bir davrda har biri bir marta).\n\n"
-              "<b>🤖 AI kiritish</b>\n"
-              "Menyusiz yozish: chek rasmini yoki PDF, ovozli xabar, bank SMS'ini yoki oddiy matnni yuboring "
-              "(masalan «taksi 25000 uob kartadan», «kofe 18 ming naqd»). Bot qoralama ko'rsatadi — "
-              "tekshiring, kerak bo'lsa tahrirlang va ✅ Saqlash ni bosing. "
-              "Ovozli xabar 2 daqiqagacha bo'lishi kerak va faqat Google Gemini bilan ishlaydi. "
-              "Rasm, ovoz va matn tahlil uchun AI xizmatiga (Google Gemini yoki Anthropic Claude) yuboriladi.\n\n"
-              "<b>💬 AI'dan so'rash va maslahatlar</b>\n"
-              "🤖 AI'dan so'rash tugmasini bosing yoki shunchaki savol yozing (masalan «bu oy taksiga qancha "
-              "ketdi?»). Har dushanba 09:00 da haftalik xulosa, yangi moliyaviy oy boshlanganda 09:00 da oylik "
-              "xulosa keladi; Sozlamalar → AI maslahatlari'da o'chirish mumkin. Savollar va hisob-kitob "
-              "xulosalari AI xizmatiga yuboriladi.",
+              "<b>💬 Savollar va maslahatlar</b>\n"
+              "Savolni shunchaki yozing (masalan «bu oy taksiga qancha ketdi?»). Har dushanba 09:00 da haftalik "
+              "xulosa, yangi moliyaviy oy boshlanganda 09:00 da oylik xulosa keladi; Sozlamalar → AI "
+              "maslahatlari'da o'chirish mumkin. Savollar va hisob-kitob xulosalari AI xizmatiga yuboriladi.",
         "ru": "<b>Команды</b>\n"
-              "/start — главное меню\n"
+              "/start — начало\n"
+              "/expense — ввести расход вручную (покупку можно оплатить с нескольких счетов)\n"
+              "/income — ввести доход вручную\n"
+              "/transfer — перевод между своими счетами, погашение кредитной карты\n"
               "/salaryday 5 — день начала финансового месяца (1–28)\n"
               "/rate 1 USD 12700 UZS — курс доллара\n"
               "/help — помощь\n\n"
-              "<b>Меню</b>\n"
-              "➖ Расход / ➕ Доход — записать операцию (покупку можно оплатить с нескольких счетов)\n"
-              "🔁 Перевод — перевод между своими счетами, погашение кредитной карты\n"
-              "💳 Счета — счета, кредитный лимит и долг; добавить, изменить, отключить\n"
-              "📊 Отчёт — финансовый месяц: доходы, расходы, диаграмма по категориям и сравнение с прошлым "
-              "периодом; нажмите категорию — подкатегории; ◀ ▶ — другие периоды (переводы не учитываются)\n"
-              "🧾 История — последние операции; откройте операцию, чтобы изменить или удалить её\n"
-              "🤖 Спросить AI — вопросы о ваших финансах\n"
-              "⚙️ Настройки — счета, бюджеты, AI-советы и язык\n\n"
+              "<b>🤖 Добавить операцию</b>\n"
+              "Просто напишите или наговорите: «такси 25000 наличными», «кофе 18 тысяч», «зарплата 12м на "
+              "hamkorbank». Можно отправить фото или PDF чека или банковское SMS. Бот сразу сохраняет операцию: "
+              "если непонятен способ оплаты, спросит только его; если непонятна категория, запишет в «Прочее». "
+              "Голосовые — до 2 минут, работают только с Google Gemini. "
+              "Фото, голос и текст отправляются на анализ в AI-сервис (Google Gemini или Anthropic Claude).\n\n"
+              "<b>Кнопки внизу</b>\n"
+              "📊 Отчёт — финансовый месяц: доходы, расходы, категории и сравнение с прошлым периодом; нажмите "
+              "категорию — подкатегории; ◀ ▶ — другие периоды (переводы не учитываются)\n"
+              "💳 Баланс — остатки счетов, кредитный лимит и долг\n"
+              "⚙️ Настройки — счета, бюджеты, история (изменить или удалить операцию), AI-советы и язык\n\n"
               "<b>🎯 Бюджеты и предупреждения</b>\n"
               "Настройки → Бюджеты: месячный лимит на категорию. Бот напишет, когда лимит или кредитный лимит "
               "карты дойдёт до 80% и 100% (по одному разу за период).\n\n"
-              "<b>🤖 AI-ввод</b>\n"
-              "Без меню: отправьте фото или PDF чека, голосовое, банковское SMS или просто текст "
-              "(например «такси 25000 uob», «кофе 18 тысяч наличными»). Бот покажет черновик — проверьте, "
-              "при необходимости измените и нажмите ✅ Сохранить. "
-              "Голосовые — до 2 минут, работают только с Google Gemini. "
-              "Фото, голос и текст отправляются на анализ в AI-сервис (Google Gemini или Anthropic Claude).\n\n"
-              "<b>💬 Вопросы к AI и советы</b>\n"
-              "Нажмите 🤖 Спросить AI или просто напишите вопрос (например «сколько я потратил на такси в этом "
-              "месяце?»). Каждый понедельник в 09:00 приходит недельная сводка, а в 09:00 в первый день нового "
-              "финансового месяца — месячная; отключить: Настройки → AI-советы. Вопросы и сводки по вашим "
-              "данным отправляются в AI-сервис.",
+              "<b>💬 Вопросы и советы</b>\n"
+              "Просто напишите вопрос (например «сколько я потратил на такси в этом месяце?»). Каждый понедельник "
+              "в 09:00 приходит недельная сводка, а в 09:00 в первый день нового финансового месяца — месячная; "
+              "отключить: Настройки → AI-советы. Вопросы и сводки по вашим данным отправляются в AI-сервис.",
         "en": "<b>Commands</b>\n"
-              "/start — main menu\n"
+              "/start — start\n"
+              "/expense — add an expense manually (a purchase can be paid from several accounts)\n"
+              "/income — add an income manually\n"
+              "/transfer — transfer between your own accounts, repay a credit card\n"
               "/salaryday 5 — day your financial month starts (1–28)\n"
               "/rate 1 USD 12700 UZS — USD exchange rate\n"
               "/help — help\n\n"
-              "<b>Menu</b>\n"
-              "➖ Expense / ➕ Income — record an operation (a purchase can be paid from several accounts)\n"
-              "🔁 Transfer — move money between your own accounts, repay a credit card\n"
-              "💳 Accounts — accounts, credit limit and debt; add, edit, deactivate\n"
-              "📊 Report — the financial month: income, expenses, a chart by category and a comparison with "
-              "the previous period; tap a category for subcategories; ◀ ▶ for other periods "
-              "(transfers are not counted)\n"
-              "🧾 History — recent operations; open one to edit or delete it\n"
-              "🤖 Ask AI — questions about your finances\n"
-              "⚙️ Settings — accounts, budgets, AI advice and language\n\n"
+              "<b>🤖 AI input: adding operations</b>\n"
+              "Just type or say it: \"taxi 25000 cash\", \"coffee 18k\", \"got salary 12m to hamkorbank\". "
+              "You can also send a receipt photo or PDF or a bank SMS. The bot saves the operation right away: if "
+              "the payment method is unclear it asks only for that; an unclear category goes to \"Other\". "
+              "Voice messages can be up to 2 minutes and work with Google Gemini only. "
+              "Photos, voice and text are sent to the AI service (Google Gemini or Anthropic Claude) for "
+              "analysis.\n\n"
+              "<b>Buttons below</b>\n"
+              "📊 Report — the financial month: income, expenses, categories and a comparison with the previous "
+              "period; tap a category for subcategories; ◀ ▶ for other periods (transfers are not counted)\n"
+              "💳 Balance — account balances, credit limit and debt\n"
+              "⚙️ Settings — accounts, budgets, history (edit or delete an operation), AI advice and language\n\n"
               "<b>🎯 Budgets and alerts</b>\n"
               "Settings → Budgets: a monthly limit per category. The bot messages you when a budget or a credit "
               "card limit reaches 80% and 100% (once per period each).\n\n"
-              "<b>🤖 AI input</b>\n"
-              "Skip the menus: send a receipt photo or PDF, a voice message, a bank SMS or plain text "
-              "(e.g. \"taxi 25000 from uob\", \"got salary 12m to hamkorbank\"). The bot shows a draft — "
-              "check it, edit if needed and press ✅ Save. "
-              "Voice messages can be up to 2 minutes and work with Google Gemini only. "
-              "Photos, voice and text are sent to the AI service (Google Gemini or Anthropic Claude) for analysis.\n\n"
-              "<b>💬 Ask AI and advice</b>\n"
-              "Press 🤖 Ask AI or just type a question (e.g. \"how much did I spend on taxi this month?\"). "
-              "A weekly summary arrives every Monday at 09:00 and a monthly review at 09:00 on the first day of "
-              "a new financial month; turn them off in Settings → AI advice. Questions and summaries of your "
-              "data are sent to the AI service.",
+              "<b>💬 Questions and advice</b>\n"
+              "Just type a question (e.g. \"how much did I spend on taxi this month?\"). A weekly summary arrives "
+              "every Monday at 09:00 and a monthly review at 09:00 on the first day of a new financial month; turn "
+              "them off in Settings → AI advice. Questions and summaries of your data are sent to the AI service.",
     },
     "use_menu": {
-        "uz": "Quyidagi menyudan foydalaning.",
-        "ru": "Воспользуйтесь меню ниже.",
-        "en": "Please use the menu below.",
+        "uz": "Amalni yozing (masalan «taksi 25000 naqd») yoki pastdagi tugmalardan foydalaning.",
+        "ru": "Напишите операцию (например «такси 25000 наличными») или воспользуйтесь кнопками внизу.",
+        "en": "Write an operation (e.g. \"taxi 25000 cash\") or use the buttons below.",
     },
     "session_lost": {
         "uz": "Sessiya tugadi. Qaytadan boshlang: /start",
@@ -165,14 +168,12 @@ TEXTS = {
     "cancelled": {"uz": "Bekor qilindi.", "ru": "Отменено.", "en": "Cancelled."},
 
     # ---- Buttons ----
-    "btn_expense": {"uz": "➖ XARAJAT", "ru": "➖ РАСХОД", "en": "➖ EXPENSE"},
-    "btn_income": {"uz": "➕ DAROMAD", "ru": "➕ ДОХОД", "en": "➕ INCOME"},
-    "btn_transfer": {"uz": "🔁 O'TKAZMA", "ru": "🔁 ПЕРЕВОД", "en": "🔁 TRANSFER"},
     "btn_accounts": {"uz": "💳 HISOBLAR", "ru": "💳 СЧЕТА", "en": "💳 ACCOUNTS"},
-    "btn_report": {"uz": "📊 HISOBOT", "ru": "📊 ОТЧЁТ", "en": "📊 REPORT"},
     "btn_history": {"uz": "🧾 TARIX", "ru": "🧾 ИСТОРИЯ", "en": "🧾 HISTORY"},
-    "btn_settings": {"uz": "⚙️ SOZLAMALAR", "ru": "⚙️ НАСТРОЙКИ", "en": "⚙️ SETTINGS"},
     "btn_cancel": {"uz": "Bekor qilish", "ru": "Отмена", "en": "Cancel"},
+    "kb_report": {"uz": "📊 Hisobot", "ru": "📊 Отчёт", "en": "📊 Report"},
+    "kb_balance": {"uz": "💳 Balans", "ru": "💳 Баланс", "en": "💳 Balance"},
+    "kb_settings": {"uz": "⚙️ Sozlamalar", "ru": "⚙️ Настройки", "en": "⚙️ Settings"},
     "btn_back": {"uz": "⬅️ Orqaga", "ru": "⬅️ Назад", "en": "⬅️ Back"},
     "btn_language": {"uz": "🌐 Til", "ru": "🌐 Язык", "en": "🌐 Language"},
     "btn_no_subcategory": {"uz": "Subkategoriyasiz", "ru": "Без подкатегории", "en": "No subcategory"},
@@ -247,24 +248,36 @@ TEXTS = {
         "ru": "Валюта счёта — {account_currency}, а операция в {currency}.",
         "en": "The account currency is {account_currency}, but the operation is in {currency}.",
     },
-    "expense_saved": {
-        "uz": "Xarajat qismi saqlandi: {amount} · {category} / {subcategory}.\n"
-              "Boshqa hisobdan to'lov qo'shasizmi?",
-        "ru": "Часть расхода сохранена: {amount} · {category} / {subcategory}.\n"
-              "Добавить оплату с другого счёта?",
-        "en": "Expense part saved: {amount} · {category} / {subcategory}.\n"
-              "Add a payment from another account?",
+    "ask_split_more": {
+        "uz": "Boshqa hisobdan ham to'lov qo'shasizmi?", "ru": "Добавить оплату с другого счёта?",
+        "en": "Add a payment from another account?",
     },
-    "income_saved": {
-        "uz": "Daromad saqlandi: +{amount} · {category}.",
-        "ru": "Доход сохранён: +{amount} · {category}.",
-        "en": "Income saved: +{amount} · {category}.",
-    },
-    "operation_saved": {"uz": "Amal saqlandi.", "ru": "Операция сохранена.", "en": "Operation saved."},
     "warn_over_limit": {
         "uz": "⚠️ Diqqat: «{name}» bo'yicha qarz {debt} — limitdan ({limit}) oshdi!",
         "ru": "⚠️ Внимание: долг по «{name}» {debt} — превышен лимит ({limit})!",
         "en": "⚠️ Warning: the debt on \"{name}\" is {debt}, above the limit of {limit}!",
+    },
+
+    # ---- Saved operation card (utils/misc/texts.operation_card) ----
+    "opcard_expense": {"uz": "💸 <b>XARAJAT</b>", "ru": "💸 <b>РАСХОД</b>", "en": "💸 <b>EXPENSE</b>"},
+    "opcard_income": {"uz": "💰 <b>KIRIM</b>", "ru": "💰 <b>ДОХОД</b>", "en": "💰 <b>INCOME</b>"},
+    "opcard_transfer": {"uz": "🔁 <b>O'TKAZMA</b>", "ru": "🔁 <b>ПЕРЕВОД</b>", "en": "🔁 <b>TRANSFER</b>"},
+    "opcard_amount": {"uz": "💰 <b>Summa:</b> {amount}", "ru": "💰 <b>Сумма:</b> {amount}",
+                      "en": "💰 <b>Amount:</b> {amount}"},
+    "opcard_category": {"uz": "🏷 <b>Kategoriya:</b> {category}", "ru": "🏷 <b>Категория:</b> {category}",
+                        "en": "🏷 <b>Category:</b> {category}"},
+    "opcard_payment": {"uz": "💳 <b>To'lov:</b> {name}", "ru": "💳 <b>Оплата:</b> {name}",
+                       "en": "💳 <b>Paid with:</b> {name}"},
+    "opcard_account": {"uz": "💳 <b>Hisob:</b> {name}", "ru": "💳 <b>Счёт:</b> {name}",
+                       "en": "💳 <b>Account:</b> {name}"},
+    "opcard_from": {"uz": "📤 <b>Qayerdan:</b> {name}", "ru": "📤 <b>Откуда:</b> {name}",
+                    "en": "📤 <b>From:</b> {name}"},
+    "opcard_to": {"uz": "📥 <b>Qayerga:</b> {name}", "ru": "📥 <b>Куда:</b> {name}", "en": "📥 <b>To:</b> {name}"},
+    "opcard_time": {"uz": "🕐 <b>Vaqt:</b> {time}", "ru": "🕐 <b>Время:</b> {time}", "en": "🕐 <b>Time:</b> {time}"},
+    "months_short": {
+        "uz": "Yan Fev Mar Apr May Iyn Iyl Avg Sen Okt Noy Dek",
+        "ru": "янв фев мар апр мая июн июл авг сен окт ноя дек",
+        "en": "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec",
     },
 
     # ---- Report and history ----
@@ -272,11 +285,6 @@ TEXTS = {
         "uz": "Bu davrda hali daromad yoki xarajat yo'q.",
         "ru": "За этот период пока нет доходов и расходов.",
         "en": "No income or expenses in this period yet.",
-    },
-    "balances": {"uz": "<b>Qoldiqlar:</b>", "ru": "<b>Остатки:</b>", "en": "<b>Balances:</b>"},
-    "current_rate": {
-        "uz": "Joriy kurs: 1 USD = {rate} UZS", "ru": "Текущий курс: 1 USD = {rate} UZS",
-        "en": "Current rate: 1 USD = {rate} UZS",
     },
     "rate_hint": {
         "uz": "Dollar kursini belgilash: /rate 1 USD 12700 UZS",
@@ -429,16 +437,6 @@ TEXTS = {
         "ru": "Не удалось сохранить перевод. Попробуйте ещё раз.",
         "en": "Could not save the transfer. Please try again.",
     },
-    "transfer_saved": {
-        "uz": "✅ O'tkazma saqlandi: {amount} · {source} → {target}",
-        "ru": "✅ Перевод сохранён: {amount} · {source} → {target}",
-        "en": "✅ Transfer saved: {amount} · {source} → {target}",
-    },
-    "repayment_saved": {
-        "uz": "✅ Kredit karta so'ndirildi: {amount} · {source} → {target}",
-        "ru": "✅ Кредитная карта погашена: {amount} · {source} → {target}",
-        "en": "✅ Credit card repaid: {amount} · {source} → {target}",
-    },
 
     # ---- Operations (history details, edit, delete) ----
     "op_line": {
@@ -494,17 +492,15 @@ TEXTS = {
 
     # ---- AI input (receipts, voice, free text, bank SMS) ----
     "ai_not_configured": {
-        "uz": "🤖 AI kiritish sozlanmagan ({env_key} yo'q). Menyudan foydalaning.",
-        "ru": "🤖 AI-ввод не настроен (нет {env_key}). Воспользуйтесь меню.",
-        "en": "🤖 AI input is not configured (no {env_key}). Please use the menu.",
+        "uz": "🤖 AI kiritish sozlanmagan ({env_key} yo'q). Qo'lda kiriting: /expense, /income, /transfer.",
+        "ru": "🤖 AI-ввод не настроен (нет {env_key}). Введите вручную: /expense, /income, /transfer.",
+        "en": "🤖 AI input is not configured (no {env_key}). Enter it manually: /expense, /income, /transfer.",
     },
     "ai_analyzing": {"uz": "⏳ Tahlil qilinmoqda...", "ru": "⏳ Анализирую...", "en": "⏳ Analyzing..."},
     "ai_nothing_found": {
-        "uz": "🤖 Bu xabarda amal topilmadi. Aniqroq yozing (masalan: «taksi 25000 uob») "
-              "yoki menyudan foydalaning.",
-        "ru": "🤖 Не нашёл операций в сообщении. Напишите точнее (например: «такси 25000 uob») "
-              "или воспользуйтесь меню.",
-        "en": "🤖 No operation found in this message. Try again (e.g. \"taxi 25000 uob\") or use the menu.",
+        "uz": "🤖 Bu xabarda amal topilmadi. Aniqroq yozing, masalan: «taksi 25000 naqd».",
+        "ru": "🤖 Не нашёл операций в сообщении. Напишите точнее, например: «такси 25000 наличными».",
+        "en": "🤖 No operation found in this message. Try again, e.g. \"taxi 25000 cash\".",
     },
     "ai_unsupported_file": {
         "uz": "Bu fayl turini o'qiy olmayman. Rasm, PDF yoki ovozli xabar yuboring.",
@@ -543,9 +539,9 @@ TEXTS = {
         "en": "⌛ The AI did not answer in time. Please try again a bit later.",
     },
     "ai_error_quota": {
-        "uz": "🚦 AI so'rovlar limiti tugadi. Keyinroq urinib ko'ring yoki menyudan foydalaning.",
-        "ru": "🚦 Исчерпан лимит запросов к AI. Попробуйте позже или воспользуйтесь меню.",
-        "en": "🚦 The AI request quota is exhausted. Try later or use the menu.",
+        "uz": "🚦 AI so'rovlar limiti tugadi. Keyinroq urinib ko'ring yoki qo'lda kiriting: /expense.",
+        "ru": "🚦 Исчерпан лимит запросов к AI. Попробуйте позже или введите вручную: /expense.",
+        "en": "🚦 The AI request quota is exhausted. Try later or enter it manually: /expense.",
     },
     "ai_error_auth": {
         "uz": "🔑 {env_key} noto'g'ri yoki unga ruxsat yo'q.",
@@ -572,75 +568,36 @@ TEXTS = {
         "ru": "Файл слишком большой (фото до 5 МБ, PDF до 14 МБ).",
         "en": "The file is too large (images up to 5 MB, PDFs up to 14 MB).",
     },
-    "ai_draft_title": {
-        "uz": "🤖 <b>Qoralama {index}/{total}</b> · {kind}", "ru": "🤖 <b>Черновик {index}/{total}</b> · {kind}",
-        "en": "🤖 <b>Draft {index}/{total}</b> · {kind}",
+    "ai_ask_account": {
+        "uz": "💳 Qaysi to'lov usuli?", "ru": "💳 Какой способ оплаты?", "en": "💳 Which payment method?",
     },
-    "ai_date_now": {"uz": "hozir", "ru": "сейчас", "en": "now"},
-    "ai_missing": {"uz": "✍️ To'ldiring: {fields}", "ru": "✍️ Заполните: {fields}", "en": "✍️ Please fill in: {fields}"},
-    "ai_field_amount": {"uz": "summa", "ru": "сумма", "en": "amount"},
-    "ai_field_currency": {"uz": "valyuta", "ru": "валюта", "en": "currency"},
-    "ai_field_account": {"uz": "hisob", "ru": "счёт", "en": "account"},
-    "ai_field_to_account": {"uz": "qabul qiluvchi hisob", "ru": "счёт получателя", "en": "receiving account"},
-    "ai_field_category": {"uz": "kategoriya", "ru": "категория", "en": "category"},
+    "ai_no_amount": {
+        "uz": "🤖 Summani tushunmadim. Masalan: «taksi 25000 naqd».",
+        "ru": "🤖 Не понял сумму. Например: «такси 25000 наличными».",
+        "en": "🤖 I could not find an amount. Example: \"taxi 25000 cash\".",
+    },
+    "ai_no_target": {
+        "uz": "🤖 O'tkazma qaysi hisobga ekanini tushunmadim. /transfer orqali kiriting.",
+        "ru": "🤖 Не понял, на какой счёт перевод. Введите его через /transfer.",
+        "en": "🤖 I could not tell which account the transfer goes to. Use /transfer.",
+    },
+    "ai_already_saved": {
+        "uz": "⏭ Bu xabar yoki fayl allaqachon saqlangan — qayta yozilmadi.",
+        "ru": "⏭ Это сообщение или файл уже сохранены — повторно не записано.",
+        "en": "⏭ This message or file was already saved — not recorded again.",
+    },
     "ai_duplicate": {
-        "uz": "⚠️ Shunga o'xshash amal allaqachon saqlangan (o'sha summa va hisob yoki o'sha xabar). "
-              "Ikki marta yozmayotganingizni tekshiring.",
-        "ru": "⚠️ Похожая операция уже сохранена (та же сумма и счёт или то же сообщение). "
-              "Проверьте, чтобы не записать дважды.",
-        "en": "⚠️ A similar operation is already saved (same amount and account, or the same message). "
-              "Make sure you are not recording it twice.",
+        "uz": "⚠️ Yaqinda shu hisobdan xuddi shunday summa yozilgan. Ikki marta yozilgan bo'lsa, o'chiring: "
+              "⚙️ Sozlamalar → 🧾 Tarix.",
+        "ru": "⚠️ Недавно с этого счёта уже записана такая же сумма. Если это дубль, удалите его: "
+              "⚙️ Настройки → 🧾 История.",
+        "en": "⚠️ The same amount on this account was recorded a few minutes ago. If it is a duplicate, delete "
+              "it: ⚙️ Settings → 🧾 History.",
     },
-    "ai_low_confidence": {
-        "uz": "🤔 AI ishonchi past — ma'lumotlarni tekshiring.", "ru": "🤔 AI не уверен — проверьте данные.",
-        "en": "🤔 The AI is not sure — please check the details.",
-    },
-    "ai_note_amount": {
-        "uz": "ℹ️ Summani aniqlab bo'lmadi.", "ru": "ℹ️ Не удалось распознать сумму.",
-        "en": "ℹ️ The amount could not be recognized.",
-    },
-    "ai_note_currency": {
-        "uz": "ℹ️ Valyuta qo'llab-quvvatlanmaydi — UZS yoki USD ni tanlang.",
-        "ru": "ℹ️ Валюта не поддерживается — выберите UZS или USD.",
-        "en": "ℹ️ Unsupported currency — choose UZS or USD.",
-    },
-    "ai_note_account_currency": {
-        "uz": "ℹ️ Topilgan hisob valyutasi mos emas — hisobni tanlang.",
-        "ru": "ℹ️ Валюта найденного счёта не совпадает — выберите счёт.",
-        "en": "ℹ️ The matched account has a different currency — choose an account.",
-    },
-    "btn_ai_save": {"uz": "✅ Saqlash", "ru": "✅ Сохранить", "en": "✅ Save"},
-    "btn_ai_save_all": {"uz": "✅ Hammasini saqlash", "ru": "✅ Сохранить все", "en": "✅ Save all"},
-    "btn_ai_skip": {"uz": "⏭ O'tkazib yuborish", "ru": "⏭ Пропустить", "en": "⏭ Skip"},
-    "btn_ai_cancel": {"uz": "❌ Bekor qilish", "ru": "❌ Отмена", "en": "❌ Cancel"},
-    "btn_ai_amount": {"uz": "✏️ Summa", "ru": "✏️ Сумма", "en": "✏️ Amount"},
-    "btn_ai_category": {"uz": "✏️ Kategoriya", "ru": "✏️ Категория", "en": "✏️ Category"},
-    "btn_ai_account": {"uz": "✏️ Hisob", "ru": "✏️ Счёт", "en": "✏️ Account"},
-    "btn_ai_to_account": {"uz": "✏️ Qayerga", "ru": "✏️ Куда", "en": "✏️ To account"},
-    "btn_ai_kind": {"uz": "✏️ Turi", "ru": "✏️ Тип", "en": "✏️ Type"},
-    "btn_ai_currency": {"uz": "✏️ Valyuta", "ru": "✏️ Валюта", "en": "✏️ Currency"},
-    "btn_ai_date": {"uz": "✏️ Sana", "ru": "✏️ Дата", "en": "✏️ Date"},
-    "ai_ask_kind": {"uz": "Amal turini tanlang:", "ru": "Выберите тип операции:", "en": "Choose the operation type:"},
-    "ai_ask_to_account": {
-        "uz": "Qaysi hisobga o'tkaziladi ({currency})?", "ru": "На какой счёт перевод ({currency})?",
-        "en": "Which account receives the money ({currency})?",
-    },
-    "ai_ask_date": {
-        "uz": "Sanani kiriting: 04.11.2026 yoki 04.11.2026 14:30",
-        "ru": "Введите дату: 04.11.2026 или 04.11.2026 14:30",
-        "en": "Enter the date: 04.11.2026 or 04.11.2026 14:30",
-    },
-    "ai_bad_date": {
-        "uz": "Sana noto'g'ri. Format: 04.11.2026 14:30 (oxirgi bir yil ichida).",
-        "ru": "Неверная дата. Формат: 04.11.2026 14:30 (в пределах последнего года).",
-        "en": "Invalid date. Format: 04.11.2026 14:30 (within the last year).",
-    },
-    "ai_saved": {"uz": "✅ Saqlandi: {summary}", "ru": "✅ Сохранено: {summary}", "en": "✅ Saved: {summary}"},
-    "ai_skipped": {"uz": "⏭ O'tkazib yuborildi.", "ru": "⏭ Пропущено.", "en": "⏭ Skipped."},
     "ai_save_failed": {
-        "uz": "Saqlab bo'lmadi: hisob topilmadi yoki valyuta mos emas. Hisobni qayta tanlang.",
-        "ru": "Не удалось сохранить: счёт не найден или валюта не совпадает. Выберите счёт заново.",
-        "en": "Could not save: the account was not found or its currency differs. Choose the account again.",
+        "uz": "Saqlab bo'lmadi: hisob topilmadi yoki valyuta mos emas.",
+        "ru": "Не удалось сохранить: счёт не найден или валюта не совпадает.",
+        "en": "Could not save: the account was not found or its currency differs.",
     },
 
     # ---- Category report ----
@@ -769,27 +726,7 @@ TEXTS = {
     },
 
     # ---- Ask AI ----
-    "btn_ask_ai": {"uz": "🤖 AI'DAN SO'RASH", "ru": "🤖 СПРОСИТЬ AI", "en": "🤖 ASK AI"},
-    "btn_menu": {"uz": "🏠 Menyu", "ru": "🏠 Меню", "en": "🏠 Menu"},
     "btn_advice_now": {"uz": "💡 Maslahat olish", "ru": "💡 Получить совет", "en": "💡 Get advice now"},
-    "ask_intro": {
-        "uz": "<b>🤖 AI'dan so'rash</b>\n\nMoliyangiz haqida savol yozing, masalan:\n"
-              "• Bu oy taksiga qancha ketdi?\n• O'tgan oyga nisbatan ko'proq sarfladimmi?\n"
-              "• Kredit kartamda qancha limit qoldi?\n\n"
-              "Qo'shimcha savollar ham berishingiz mumkin. Chiqish uchun 🏠 Menyu ni bosing.\n"
-              "<i>Savollar va kerakli ma'lumotlar AI xizmatiga (Google Gemini yoki Anthropic Claude) yuboriladi.</i>",
-        "ru": "<b>🤖 Спросить AI</b>\n\nНапишите вопрос о своих финансах, например:\n"
-              "• Сколько я потратил на такси в этом месяце?\n• Я трачу больше, чем в прошлом месяце?\n"
-              "• Сколько осталось лимита на кредитке?\n\n"
-              "Можно задавать уточняющие вопросы. Чтобы выйти, нажмите 🏠 Меню.\n"
-              "<i>Вопросы и нужные данные отправляются в AI-сервис (Google Gemini или Anthropic Claude).</i>",
-        "en": "<b>🤖 Ask AI</b>\n\nAsk anything about your finances, for example:\n"
-              "• How much did I spend on taxi this month?\n• Am I spending more than last month?\n"
-              "• How much credit is left on my card?\n\n"
-              "Follow-up questions work too. Press 🏠 Menu to leave.\n"
-              "<i>Questions and the data needed to answer them are sent to the AI service "
-              "(Google Gemini or Anthropic Claude).</i>",
-    },
     "ask_thinking": {"uz": "🤔 O'ylayapman...", "ru": "🤔 Думаю...", "en": "🤔 Thinking..."},
     "ask_error_refused": {
         "uz": "AI bu savolga javob bermadi. Savolni boshqacha yozib ko'ring.",
@@ -797,9 +734,9 @@ TEXTS = {
         "en": "The AI declined to answer this. Try rephrasing the question.",
     },
     "ask_error_bad_input": {
-        "uz": "AI so'rovni qabul qilmadi. Qayta urinib ko'ring yoki 🏠 Menyu dan yangi suhbat boshlang.",
-        "ru": "AI не принял запрос. Попробуйте ещё раз или начните новый диалог через 🏠 Меню.",
-        "en": "The AI rejected the request. Try again or start a new conversation from 🏠 Menu.",
+        "uz": "AI so'rovni qabul qilmadi. Qayta urinib ko'ring yoki /start bilan yangi suhbat boshlang.",
+        "ru": "AI не принял запрос. Попробуйте ещё раз или начните новый диалог командой /start.",
+        "en": "The AI rejected the request. Try again or start a new conversation with /start.",
     },
 
     # ---- AI advice ----

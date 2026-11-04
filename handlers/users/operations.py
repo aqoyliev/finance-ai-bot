@@ -1,4 +1,4 @@
-"""Opening a recent operation from History to edit or delete it."""
+"""Opening a recent operation from Settings -> History to edit or delete it."""
 from aiogram import types
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters import Text
@@ -43,7 +43,7 @@ def saved_notice(saved, lang: str) -> str:
 
 async def not_found(call: types.CallbackQuery, state: FSMContext, lang: str):
     await state.finish()
-    await call.message.edit_text(t("operation_not_found", lang), reply_markup=kb.main_menu(lang))
+    await call.message.edit_text(t("operation_not_found", lang), reply_markup=op_kb.back_to_history(lang))
 
 
 @dp.callback_query_handler(Text(startswith="opv:"), state="*")
@@ -79,7 +79,7 @@ async def new_amount(message: types.Message, state: FSMContext, lang: str):
     try:
         saved = await db.update_amount(message.from_user.id, tx_id, amount)
     except db.FinanceError:
-        await message.answer(t("operation_not_found", lang), reply_markup=kb.main_menu(lang))
+        await message.answer(t("operation_not_found", lang), reply_markup=op_kb.back_to_history(lang))
         return
     view = await db.get_operation(message.from_user.id, tx_id)
     await render_operation(message, view, lang, edit=False, notice=saved_notice(saved, lang))
@@ -201,4 +201,4 @@ async def delete(call: types.CallbackQuery, state: FSMContext, lang: str):
         await not_found(call, state, lang)
         return
     lines = [t("operation_deleted", lang)] + [balance_line(a, lang) for a in accounts]
-    await call.message.edit_text("\n".join(lines), reply_markup=kb.main_menu(lang))
+    await call.message.edit_text("\n".join(lines), reply_markup=op_kb.back_to_history(lang))

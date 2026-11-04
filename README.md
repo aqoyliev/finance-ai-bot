@@ -27,27 +27,31 @@ A private personal-finance bot for a single owner, built on this template.
 - 🔐 Private: only Telegram IDs listed in `ADMINS` can use it; anyone else gets one short "private bot" reply
 - 🌐 Uzbek (Latin), Russian and English. The language is chosen on the first `/start` and can be changed in
   Settings. Starter accounts and categories are created once, in the language picked first
-- ➖ Expenses / ➕ incomes by category and subcategory; a purchase can be split across several accounts
+- ✍️ Operations are added by typing or speaking (see AI input below) and saved at once; `/expense`, `/income` and
+  `/transfer` remain for manual entry (a purchase can be split across several accounts there)
+- ⌨️ A small reply keyboard instead of a menu: 📊 Report, 💳 Balance, ⚙️ Settings (accounts, budgets, history,
+  AI advice, language); it is shown after the language choice and on every `/start`
+- 🧾 Every saved operation is confirmed with a short card (see below)
 - 💳 Accounts (cash, debit, credit; UZS or USD): add, rename, change the opening balance or credit limit,
   deactivate (soft delete, history is kept). Credit cards show debt, limit and available credit
 - 🔁 Transfers between own accounts of the same currency; a transfer to a credit card repays its debt.
   Transfers are never counted as income or expense
 - ⚠️ Warning when an expense pushes a credit card's debt above its limit
-- 🧾 History: open a recent operation to change its amount, category or account, or delete it
-  (balances are recalculated; deleting a transfer removes both legs)
+- 🧾 History (⚙️ Settings → 🧾 History): open a recent operation to change its amount, category or account, or
+  delete it (balances are recalculated; deleting a transfer removes both legs)
 - 📊 Report for the financial month (it starts on the salary day, `/salaryday 5`): income, expenses and balance per
   currency, expenses by category with share and change versus the previous period, a donut chart (see below)
 - 🎯 Monthly budgets per expense category and 🔔 alerts at 80% / 100% of a budget or of a credit card limit
-- 🤖 AI input: record operations without menus from a receipt photo, a forwarded bank SMS
-  or free text (see below)
-- 💬 Ask AI: questions about your own data in plain language, plus 📅 weekly and 📆 monthly AI advice
+- 🤖 AI input: record operations from free text, a voice message, a receipt photo or a forwarded bank SMS,
+  without confirmation (see below)
+- 💬 Ask AI: type a question about your own data in plain language; plus 📅 weekly and 📆 monthly AI advice
 
 All texts live in `utils/i18n.py`; operations are written through `record_operation` / `record_transfer`
 in `utils/db_api/operations.py`.
 
 ### Category report and chart
 
-📊 REPORT shows the current financial period as a chart (photo) with the text summary as its caption; when the text
+📊 Report (reply keyboard) shows the current financial period as a chart (photo) with the text summary as its caption; when the text
 does not fit Telegram's 1024-character caption limit it is sent as a separate message right after the photo.
 
 - Per currency: income, expenses, balance (transfers are never counted), then expenses by category, biggest first,
@@ -57,7 +61,7 @@ does not fit Telegram's 1024-character caption limit it is sent as a separate me
   start of the previous period (day 10 of this month vs days 1-10 of the last one); a finished period is
   compared with the whole previous one. The note under the report shows the compared dates.
 - Tap a category for its subcategory breakdown; ◀ / ▶ move to the previous / next period (never into the future);
-  the account balances are on 💳 ACCOUNTS.
+  the account balances are on 💳 Balance.
 - The image is a receipt-style card (see below). Only if the card cannot be rendered, the old matplotlib chart is
   sent instead: a donut for up to 8 categories (tiny slices merged into "Other"), horizontal bars for more (top 9 +
   "Other"), DejaVu Sans, drawn in a worker thread (`utils/charts.py`). If that fails too, the report is text only.
@@ -75,7 +79,7 @@ the page, so rendering works offline.
   rest folded into "Other"), total vs the previous period, income / expenses / balance, a barcode per 7 days, top 3
   expenses, budgets as `[#######---]` bars and the payment method split (cash / debit / credit card) with credit
   limit use.
-- **Report** (📊 REPORT, any period; also with "Get advice now"): categories with share bars and change, total vs the
+- **Report** (📊 Report, any period; also with "Get advice now"): categories with share bars and change, total vs the
   previous period (or its same days), over-budget categories.
 - No expenses in the window: an "empty" receipt. Expenses in both UZS and USD: one section per currency, never
   converted.
@@ -96,7 +100,7 @@ Settings → 🎯 Budgets: pick an expense category, then set, change or remove 
 is the financial period). The report shows `spent / limit`, the percentage and a progress bar for every budget.
 Spending in the other currency counts towards a budget when a USD rate is set.
 
-After an expense is saved (manually or from an AI draft), edited (amount, category or account) or after a
+After an expense is saved (manually or from AI input), edited (amount, category or account) or after a
 transfer touches a credit card, the bot checks the budgets of the affected categories and the affected credit cards
 and sends **one message per threshold (80% and 100%) per period** for each category / card:
 
@@ -127,22 +131,52 @@ Approximate Gemini cost (paid tier, [pricing page](https://aistudio.google.com/d
 message is roughly $0.002-0.004; `gemini-3.8-flash` is $0.75 / $3.75 per 1M until 31.12.2026 ($1.50 / $7.50
 from 01.01.2027), so an Ask AI answer with a few tool calls or one advice is roughly $0.01-0.04.
 
+### Saved operation card
+
+Every saved operation (AI input, `/expense`, `/income`, `/transfer`) is confirmed with the same short HTML card
+(`utils/misc/texts.operation_card`, labels in uz / ru / en):
+
+```
+💸 XARAJAT
+──────────────
+💰 Summa: 25 000 so'm
+🏷 Kategoriya: Transport › Taksi
+💳 To'lov: Naqd
+🕐 Vaqt: 04 Noy, 22:15
+──────────────
+📝 taksi
+```
+
+An income starts with 💰 KIRIM (and shows the account), a transfer with 🔁 O'TKAZMA and From / To lines; the note
+line is left out when there is no note. A credit card pushed over its limit adds the ⚠️ warning under the card.
+
 ### AI input
 
-Send the bot any of these instead of using the menu:
+Just send the bot any of these:
 
-- a **receipt photo** (or an image / PDF sent as a file; Gemini: JPEG, PNG, WebP, HEIC up to 14 MB; Claude: JPEG, PNG, GIF, WebP up to 5 MB; PDF up to 14 MB); the total paid is used, not the individual lines
-- a **voice message** or audio file (Gemini only; up to 2 minutes and 14 MB): `taksiga 25 ming to'ladim naqd`;
-  it is transcribed and parsed in one request into the same drafts as text
-- **free text** in Uzbek, Russian or English: `taksi 25000 uob kartadan`, `кофе 18 тысяч наличными`,
+- **free text** in Uzbek, Russian or English: `taksi 25000 naqd`, `кофе 18 тысяч наличными`,
   `got salary 12m to hamkorbank`; several operations in one message are fine
+- a **voice message** or audio file (Gemini only; up to 2 minutes and 14 MB): `taksiga 25 ming to'ladim naqd`;
+  it is transcribed and parsed in one request, like text
+- a **receipt photo** (or an image / PDF sent as a file; Gemini: JPEG, PNG, WebP, HEIC up to 14 MB; Claude: JPEG, PNG, GIF, WebP up to 5 MB; PDF up to 14 MB); the total paid is used, not the individual lines
 - a **forwarded / pasted bank SMS** or notification (Uzcard, Humo, Visa; debit and credit)
 
-The bot shows a draft card (amount, type, category, account, date, note). Nothing is saved until you press
-✅ Save; ✏️ buttons change the amount, category, account, type, currency or date, ❌ Cancel drops it. Missing
-required fields (e.g. the account) must be filled in first. Several drafts from one message are confirmed one
-by one (⏭ Skip) or with ✅ Save all. The card warns when an almost identical operation already exists (same
-amount and account within 10 minutes, or the same SMS / photo sent again). Saved rows have `source = "ai"`.
+There is no confirmation step: every recognized operation is saved right away and confirmed with a card.
+
+- **Payment method (account).** If it is clear (card digits from an SMS or receipt, "naqd" / "karta" / a bank
+  name, a valid account), the operation is saved at once. Otherwise the bot asks only "💳 Which payment method?"
+  with one button per account (of the operation's currency) and saves on tap; typing a short account name
+  (`naqd`, `uob`) works too. When several operations of one message lack the account, it is asked once and the
+  answer applies to all of them.
+- **Category.** An expense or income without a recognizable category goes to "Other" ("Boshqa" / "Прочее";
+  "Other income" for incomes), created if the user has none.
+- **Amount.** An operation without an amount is not saved; the bot answers that no amount was understood.
+- A transfer whose receiving account is unclear is not saved; the bot points to `/transfer`.
+- **Duplicates.** The same SMS, photo or file sent again is not saved twice ("already saved"). The same amount on
+  the same account within 10 minutes (e.g. a typed taxi and then its bank SMS) is saved, with a warning that
+  points to ⚙️ Settings → 🧾 History for deleting it. Typed text has no fingerprint, so writing "coffee 18000"
+  again on another day is a new expense.
+- Budget and credit limit alerts follow the save confirmations. Saved rows have `source = "ai"`.
 
 With `AI_PROVIDER=claude` voice messages get a short reply that voice input needs Google Gemini (Claude has no
 audio input). Longer voice messages get a "too long" reply before anything is downloaded.
@@ -153,11 +187,14 @@ schema (Gemini: `response_json_schema` with JSON mode, low thinking level; Claud
 `output_config.format`).
 `utils/ai/parser.py` never trusts the answer: amounts are re-parsed (`125 000,00`, `125.000`, `18 ming`, `12m`),
 the currency must be UZS/USD, the account must be yours and in that currency, the category must exist;
-anything doubtful is left empty for you to choose. Card digits from an SMS (`*1234`) match an account whose
+anything doubtful is left empty (then the account is asked, the category falls back to "Other"). Card digits from an SMS (`*1234`) match an account whose
 **name contains those 4 digits**, e.g. rename the account to `UOB 1234`.
 
-While you are inside a menu step (e.g. typing an amount), text goes to that step, not to the AI.
-Without the key of the selected provider the bot works as before and answers that AI input is not configured.
+While you are inside a manual step (e.g. typing an amount after `/expense`), text goes to that step, not to the
+AI. The reply-keyboard buttons are handled before everything else (`handlers/users/menu.py` is registered right
+after `start`), so their texts never reach the AI or a form step, and pressing one ends any flow in progress.
+Without the key of the selected provider the manual commands still work and free text gets an "AI input is not
+configured" answer.
 
 > **Privacy:** receipts and texts you send for AI input, together with the names of your accounts and
 > categories, are sent to the selected AI provider (Google Gemini API or Anthropic Claude API) for
@@ -165,11 +202,12 @@ Without the key of the selected provider the bot works as before and answers tha
 
 ### Ask AI and automatic advice
 
-**Ask AI.** Press 🤖 ASK AI in the main menu and type questions ("how much did I spend on taxi this month?",
-"am I spending more than last month?", "how much credit is left?"). The bot stays in this mode, so follow-up
-questions work ("and last month?"), until you press 🏠 Menu. You can also just type a question without the
-button: the extraction model classifies every free-text message as an *operation*, a *question* or *other*;
-questions go to Ask AI, operations still become drafts. Photos, files and bank SMS always go to AI input.
+**Ask AI.** Just type a question ("how much did I spend on taxi this month?", "am I spending more than last
+month?", "how much credit is left?"): the extraction model classifies every free-text message as an
+*operation*, a *question* or *other*; questions go to Ask AI, operations are saved. Follow-up questions work
+("and last month?") because the conversation is kept and the extraction model is told about it; `/start`, a
+reply-keyboard button or a newly saved operation starts a fresh one. Photos, files and bank SMS always go to AI
+input.
 
 How it works (`utils/ai/assistant.py`, `utils/ai/tools.py`): the analysis model (`gemini-3.8-flash` or
 `claude-opus-5-5`) gets
@@ -185,7 +223,7 @@ and 4 minutes per question) and answers in your language as plain text. The conv
 top categories, unusual spending, budget status and 2-4 saving tips. 📆 A monthly review at **09:00 on the
 first day of a new financial month** (your salary day): the finished period vs the one before, budgets,
 credit cards and advice for the new period. Turn either off in ⚙️ Settings → 🤖 AI advice; 💡 Get advice now
-(in Ask AI, the report and the advice settings) reviews the running period on demand. Nothing is sent for a
+(in the report and the advice settings) reviews the running period on demand. Nothing is sent for a
 window without income or expenses.
 The scheduler (`utils/advice_scheduler.py`) is an asyncio task started in `on_startup` that checks once a
 minute; what was sent is stored on the user row (migration `0004`), so a restart never sends twice and advice
@@ -302,12 +340,12 @@ The Claude and Gemini SDKs are mocked, so no API key is needed and no requests a
 ├── data/
 │   └── config.py          # Reads settings from .env
 ├── handlers/
-│   ├── users/             # start, help, menus, reports, budgets, ai_input (AI drafts), ask_ai, advice, echo
+│   ├── users/             # start, menu (reply keyboard), help, settings, finance (/expense, /income, history), transfer, accounts, reports, budgets, operations, advice, ai_input (AI input), ask_ai, echo
 │   ├── groups/            # group chat handlers
 │   ├── channels/          # channel post handlers
 │   └── errors/            # global error handler
 ├── keyboards/
-│   ├── default/           # reply keyboards
+│   ├── default/           # reply keyboard (📊 Report, 💳 Balance, ⚙️ Settings)
 │   └── inline/            # inline keyboards
 ├── middlewares/           # access (ADMINS only), language, throttling
 ├── states/                # FSM states

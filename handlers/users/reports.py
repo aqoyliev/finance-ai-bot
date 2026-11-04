@@ -60,22 +60,25 @@ async def make_chart(report: db.PeriodReport, lang: str) -> Optional[bytes]:
         return None
 
 
-async def show_screen(call: types.CallbackQuery, text: str, markup: types.InlineKeyboardMarkup,
-                      chart: Optional[bytes] = None, caption: str = "") -> None:
-    """Show a report screen in place of the message the button was pressed on.
+async def show_screen(message: types.Message, text: str, markup: types.InlineKeyboardMarkup,
+                      chart: Optional[bytes] = None, caption: str = "", replace: bool = True) -> None:
+    """Show a report screen in place of `message` (the one an inline button was pressed on).
 
     Text on a text message is edited in place; anything involving a photo deletes the old message(s) and
     sends a new one. A photo carries the text as its caption when it fits, otherwise `caption` (a short
-    title) and the text with the keyboard follows as a separate message."""
-    message = call.message
+    title) and the text with the keyboard follows as a separate message. With replace=False (opened from
+    the reply keyboard) nothing is edited or deleted, the screen is simply sent."""
     chat_id = message.chat.id
-    linked = _linked_photos.pop((chat_id, message.message_id), None)
-    if linked:
-        with contextlib.suppress(TelegramAPIError):
-            await bot.delete_message(chat_id, linked)
+    if replace:
+        linked = _linked_photos.pop((chat_id, message.message_id), None)
+        if linked:
+            with contextlib.suppress(TelegramAPIError):
+                await bot.delete_message(chat_id, linked)
 
     if chart is None:
-        if message.photo:
+        if not replace:
+            await bot.send_message(chat_id, text, reply_markup=markup)
+        elif message.photo:
             with contextlib.suppress(TelegramAPIError):
                 await message.delete()
             await bot.send_message(chat_id, text, reply_markup=markup)
@@ -83,8 +86,9 @@ async def show_screen(call: types.CallbackQuery, text: str, markup: types.Inline
             await message.edit_text(text, reply_markup=markup)
         return
 
-    with contextlib.suppress(TelegramAPIError):
-        await message.delete()
+    if replace:
+        with contextlib.suppress(TelegramAPIError):
+            await message.delete()
     photo = types.InputFile(io.BytesIO(chart), filename="report.png")
     if len(text) <= CAPTION_LIMIT:
         await bot.send_photo(chat_id, photo, caption=text, reply_markup=markup, parse_mode=HTML)
@@ -100,29 +104,22 @@ async def category_ids(user_id: int) -> Dict[str, int]:
     return {c.name: c.id for c in await db.list_categories(user_id, "expense")}
 
 
-@dp.callback_query_handler(Text(equals="menu:report"), state="*")
-async def open_report(call: types.CallbackQuery, state: FSMContext, lang: str):
-    await call.answer()
-    await state.finish()
-    await render_report(call, 0, lang)
-
-
 @dp.callback_query_handler(Text(startswith="rep:"), state="*")
 async def navigate_report(call: types.CallbackQuery, state: FSMContext, lang: str):
     await call.answer()
     await state.finish()
-    await render_report(call, min(int(call.data.split(":")[1]), 0), lang)
+    await render_report(call.message, call.from_user.id, min(int(call.data.split(":")[1]), 0), lang)
 
 
-async def render_report(call: types.CallbackQuery, offset: int, lang: str):
-    user_id = call.from_user.id
+async def render_report(message: types.Message, user_id: int, offset: int, lang: str, replace: bool = True):
+    """The report of a period (0 = running); replace=False sends it as new messages (reply keyboard)."""
     report = await db.build_period_report(user_id, offset)
     text = report_text(report, lang)
     if report.has_data:
         text += "\n\n" + t("report_tap_category", lang)
     markup = kb.report_view(report, await category_ids(user_id), lang)
     chart = await make_image(user_id, report, lang)
-    await show_screen(call, text, markup, chart, caption=report_title(report, lang))
+    await show_screen(message, text, markup, chart, caption=report_title(report, lang), replace=replace)
 
 
 @dp.callback_query_handler(Text(startswith="repc:"), state="*")
@@ -133,9 +130,9 @@ async def show_category(call: types.CallbackQuery, state: FSMContext, lang: str)
     offset = min(int(offset), 0)
     category = await db.get_category(call.from_user.id, int(category_id))
     if category is None:
-        await render_report(call, offset, lang)
+        await render_report(call.message, call.from_user.id, offset, lang)
         return
     report = await db.build_period_report(call.from_user.id, offset)
     by_currency = await db.expense_by_subcategory(call.from_user.id, category.name, report.start, report.end)
-    await show_screen(call, subcategory_text(report, category.name, by_currency, lang),
+    await show_screen(call.message, subcategory_text(report, category.name, by_currency, lang),
                       kb.subcategory_view(offset, lang))
