@@ -187,9 +187,10 @@ async def test_accounts_budgets_rate_and_categories():
     assert budgets["budgets"] == [{"category": "Transport", "currency": "UZS", "limit": 40_000, "spent": 35_000,
                                    "used_pct": 87, "left": 5_000}]
     rate, _ = await run("get_exchange_rate")
-    assert rate == {"usd_to_uzs": None}
+    assert rate == {"usd_to_uzs": None, "source": None, "date": None}
     await db.set_usd_rate(USER, Decimal("12700"))
-    assert (await run("get_exchange_rate"))[0] == {"usd_to_uzs": "12700"}
+    manual = (await run("get_exchange_rate"))[0]
+    assert manual["usd_to_uzs"] == "12700" and "manually" in manual["source"]
     categories, _ = await run("get_categories")
     assert "Transport" in categories["expense"] and categories["income"]
 

@@ -20,10 +20,35 @@ async def salaryday(message: types.Message, lang: str):
     await message.answer(t("salaryday_saved", lang, day=int(arg)))
 
 
+AUTO_WORDS = {"auto", "avto", "авто"}
+
+
+def rate_source(info, lang: str) -> str:
+    if info.source == "cbu":
+        return t("rate_source_cbu", lang, date=info.day.strftime("%d.%m.%Y"))
+    return t("rate_source_manual", lang)
+
+
+async def rate_status(user_id: int, lang: str) -> str:
+    info = await db.get_usd_rate_info(user_id)
+    if info is None:
+        return t("rate_unknown", lang)
+    return t("rate_current", lang, rate=f"{info.rate:f}", source=rate_source(info, lang))
+
+
 @dp.message_handler(Command("rate"), state="*")
 async def rate_command(message: types.Message, lang: str):
+    """/rate: show the rate; /rate 1 USD 12850 UZS: set a manual override; /rate auto: use the Central Bank rate."""
     args = message.get_args().split()
-    if len(args) != 4 or args[1].upper() != "USD" or args[3].upper() != "UZS":
+    user_id = message.from_user.id
+    if not args:
+        await message.answer(await rate_status(user_id, lang))
+        return
+    if len(args) == 1 and args[0].lower() in AUTO_WORDS:
+        removed = await db.clear_usd_rate(user_id)
+        await message.answer(t("rate_auto" if removed else "rate_auto_none", lang))
+        return
+    if len(args) != 4 or args[0] != "1" or args[1].upper() != "USD" or args[3].upper() != "UZS":
         await message.answer(t("rate_usage", lang))
         return
     try:
@@ -33,7 +58,7 @@ async def rate_command(message: types.Message, lang: str):
     except (InvalidOperation, ValueError):
         await message.answer(t("rate_invalid", lang))
         return
-    await db.set_usd_rate(message.from_user.id, rate)
+    await db.set_usd_rate(user_id, rate)
     await message.answer(t("rate_saved", lang, rate=rate))
 
 

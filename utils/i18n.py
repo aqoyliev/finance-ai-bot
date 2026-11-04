@@ -46,15 +46,15 @@ TEXTS = {
         "uz": "<b>MOLIYA BOTI</b>\n\nXarajat yoki daromadni shunchaki yozing yoki ovozli xabar yuboring, masalan: "
               "«taksi 25000 naqd». Chek rasmi yoki bank SMS'ini ham yuborishingiz mumkin — bot darhol saqlaydi.\n\n"
               "Pastdagi tugmalar: 📊 Hisobot, 💳 Balans, ⚙️ Sozlamalar.\n"
-              "Maosh kuni: /salaryday 5 · Dollar kursi: /rate 1 USD 12700 UZS",
+              "Maosh kuni: /salaryday 5 · Dollar kursi: /rate",
         "ru": "<b>ФИНАНСОВЫЙ БОТ</b>\n\nПросто напишите или наговорите расход или доход, например: "
               "«такси 25000 наличными». Можно прислать фото чека или банковское SMS — бот сразу сохранит.\n\n"
               "Кнопки внизу: 📊 Отчёт, 💳 Баланс, ⚙️ Настройки.\n"
-              "День зарплаты: /salaryday 5 · Курс доллара: /rate 1 USD 12700 UZS",
+              "День зарплаты: /salaryday 5 · Курс доллара: /rate",
         "en": "<b>FINANCE BOT</b>\n\nJust type or say an expense or income, e.g. \"taxi 25000 cash\". "
               "You can also send a receipt photo or a bank SMS — the bot saves it right away.\n\n"
               "Buttons below: 📊 Report, 💳 Balance, ⚙️ Settings.\n"
-              "Salary day: /salaryday 5 · USD rate: /rate 1 USD 12700 UZS",
+              "Salary day: /salaryday 5 · USD rate: /rate",
     },
     "bot_started": {"uz": "Bot ishga tushdi", "ru": "Бот запущен", "en": "Bot has started"},
     "cmd_start": {"uz": "Boshlash", "ru": "Начало", "en": "Start"},
@@ -64,9 +64,9 @@ TEXTS = {
                      "en": "Transfer between accounts"},
     "cmd_salaryday": {"uz": "Maosh kuni, masalan /salaryday 5", "ru": "День зарплаты, например /salaryday 5",
                       "en": "Set salary day, e.g. /salaryday 5"},
-    "cmd_rate": {"uz": "Dollar kursi, masalan /rate 1 USD 12700 UZS",
-                 "ru": "Курс доллара, например /rate 1 USD 12700 UZS",
-                 "en": "Set USD rate, e.g. /rate 1 USD 12700 UZS"},
+    "cmd_rate": {"uz": "Dollar kursi (Markaziy bank) yoki o'zingiznikini belgilash",
+                 "ru": "Курс доллара (Центробанк) или свой курс",
+                 "en": "USD rate (Central Bank) or set your own"},
     "cmd_settings": {"uz": "Sozlamalar", "ru": "Настройки", "en": "Settings"},
     "cmd_report": {"uz": "Hisobot", "ru": "Отчёт", "en": "Report"},
     "cmd_balance": {"uz": "Hisoblar balansi", "ru": "Баланс счетов", "en": "Account balances"},
@@ -83,7 +83,7 @@ TEXTS = {
               "/income — daromadni qo'lda kiritish\n"
               "/transfer — o'z hisoblaringiz orasida o'tkazma, kredit kartani so'ndirish\n"
               "/salaryday 5 — moliyaviy oy boshlanadigan kun (1–28)\n"
-              "/rate 1 USD 12700 UZS — dollar kursi\n"
+              "/rate — dollar kursi (Markaziy bank kursi; o'zgartirish: /rate 1 USD 12850 UZS, qaytarish: /rate auto)\n"
               "/help — yordam\n\n"
               "<b>🤖 Amal qo'shish</b>\n"
               "Shunchaki yozing yoki ayting: «taksi 25000 naqd», «kofe 18 ming», «maosh 12m hamkorbankka». "
@@ -110,7 +110,7 @@ TEXTS = {
               "/income — ввести доход вручную\n"
               "/transfer — перевод между своими счетами, погашение кредитной карты\n"
               "/salaryday 5 — день начала финансового месяца (1–28)\n"
-              "/rate 1 USD 12700 UZS — курс доллара\n"
+              "/rate — курс доллара (курс Центробанка; свой курс: /rate 1 USD 12850 UZS, вернуть: /rate auto)\n"
               "/help — помощь\n\n"
               "<b>🤖 Добавить операцию</b>\n"
               "Просто напишите или наговорите: «такси 25000 наличными», «кофе 18 тысяч», «зарплата 12м на "
@@ -136,7 +136,7 @@ TEXTS = {
               "/income — add an income manually\n"
               "/transfer — transfer between your own accounts, repay a credit card\n"
               "/salaryday 5 — day your financial month starts (1–28)\n"
-              "/rate 1 USD 12700 UZS — USD exchange rate\n"
+              "/rate — USD rate (Central Bank rate; your own: /rate 1 USD 12850 UZS, undo: /rate auto)\n"
               "/help — help\n\n"
               "<b>🤖 AI input: adding operations</b>\n"
               "Just type or say it: \"taxi 25000 cash\", \"coffee 18k\", \"got salary 12m to hamkorbank\". "
@@ -292,9 +292,9 @@ TEXTS = {
         "en": "No income or expenses in this period yet.",
     },
     "rate_hint": {
-        "uz": "Dollar kursini belgilash: /rate 1 USD 12700 UZS",
-        "ru": "Чтобы задать курс доллара: /rate 1 USD 12700 UZS",
-        "en": "To set the USD rate: /rate 1 USD 12700 UZS",
+        "uz": "Dollar kursi hozircha noma'lum. O'zingiznikini belgilash: /rate 1 USD 12850 UZS",
+        "ru": "Курс доллара пока неизвестен. Чтобы задать свой: /rate 1 USD 12850 UZS",
+        "en": "To set the USD rate: /rate",
     },
     "history_empty": {"uz": "Hali amallar yo'q.", "ru": "Операций пока нет.", "en": "No operations yet."},
     "history_title": {
@@ -314,11 +314,11 @@ TEXTS = {
     # ---- Settings ----
     "settings": {
         "uz": "<b>Sozlamalar</b>\n\nMaosh kuni: {salary_day}\n/salaryday 5 — maosh kunini o'zgartirish\n"
-              "/rate 1 USD 12700 UZS — dollar kursi",
+              "/rate — dollar kursi (Markaziy bank; o'zingiznikini: /rate 1 USD 12850 UZS, qaytarish: /rate auto)",
         "ru": "<b>Настройки</b>\n\nДень зарплаты: {salary_day}\n/salaryday 5 — изменить день зарплаты\n"
-              "/rate 1 USD 12700 UZS — курс доллара",
+              "/rate — курс доллара (Центробанк; свой: /rate 1 USD 12850 UZS, вернуть: /rate auto)",
         "en": "<b>Settings</b>\n\nSalary day: {salary_day}\n/salaryday 5 — change the salary day\n"
-              "/rate 1 USD 12700 UZS — USD exchange rate",
+              "/rate — USD rate (Central Bank; your own: /rate 1 USD 12850 UZS, undo: /rate auto)",
     },
     "salaryday_usage": {
         "uz": "Maosh kunini 1 dan 28 gacha kiriting. Masalan: /salaryday 5",
@@ -330,8 +330,39 @@ TEXTS = {
         "ru": "Ваш финансовый месяц будет начинаться {day}-го числа.",
         "en": "Your financial month will start on day {day}.",
     },
-    "rate_usage": {"uz": "Format: /rate 1 USD 12700 UZS", "ru": "Формат: /rate 1 USD 12700 UZS",
-                   "en": "Format: /rate 1 USD 12700 UZS"},
+    "rate_usage": {
+        "uz": "Format: /rate 1 USD 12850 UZS\nHozirgi kurs: /rate · Markaziy bank kursiga qaytish: /rate auto",
+        "ru": "Формат: /rate 1 USD 12850 UZS\nТекущий курс: /rate · Вернуть курс Центробанка: /rate auto",
+        "en": "Format: /rate 1 USD 12850 UZS\nCurrent rate: /rate · Back to the Central Bank rate: /rate auto",
+    },
+    "rate_source_cbu": {"uz": "Markaziy bank, {date}", "ru": "Центральный банк, {date}",
+                        "en": "Central Bank, {date}"},
+    "rate_source_manual": {"uz": "qo'lda", "ru": "вручную", "en": "manual"},
+    "rate_current": {
+        "uz": "Dollar kursi: 1 USD = {rate} UZS ({source})\n\n/rate 1 USD 12850 UZS — o'zingiznikini belgilash\n"
+              "/rate auto — Markaziy bank kursiga qaytish",
+        "ru": "Курс доллара: 1 USD = {rate} UZS ({source})\n\n/rate 1 USD 12850 UZS — задать свой курс\n"
+              "/rate auto — вернуть курс Центробанка",
+        "en": "USD rate: 1 USD = {rate} UZS ({source})\n\n/rate 1 USD 12850 UZS — set your own rate\n"
+              "/rate auto — back to the Central Bank rate",
+    },
+    "rate_unknown": {
+        "uz": "Markaziy bank kursini hozircha olib bo'lmadi. Keyinroq urinib ko'ring yoki o'zingiznikini "
+              "belgilang: /rate 1 USD 12850 UZS",
+        "ru": "Курс Центробанка пока получить не удалось. Попробуйте позже или задайте свой: "
+              "/rate 1 USD 12850 UZS",
+        "en": "The Central Bank rate could not be fetched yet. Try later or set your own: "
+              "/rate 1 USD 12850 UZS",
+    },
+    "rate_auto": {
+        "uz": "Endi Markaziy bank kursi ishlatiladi.", "ru": "Теперь используется курс Центробанка.",
+        "en": "The Central Bank rate is used again.",
+    },
+    "rate_auto_none": {
+        "uz": "O'z kursingiz belgilanmagan, Markaziy bank kursi ishlatilmoqda.",
+        "ru": "Свой курс не задан, используется курс Центробанка.",
+        "en": "You have no own rate set; the Central Bank rate is used.",
+    },
     "rate_invalid": {"uz": "Kurs musbat son bo'lishi kerak.", "ru": "Курс должен быть положительным числом.",
                      "en": "The rate must be a positive number."},
     "rate_saved": {"uz": "Kurs saqlandi: 1 USD = {rate} UZS", "ru": "Курс сохранён: 1 USD = {rate} UZS",

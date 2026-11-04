@@ -26,6 +26,20 @@ asyncio.run(_migrate())
 
 
 @pytest.fixture(autouse=True)
+def no_network_rates(monkeypatch):
+    """Tests never reach cbu.uz: by default the fetch fails (no official rate); tests mock `fetch_cbu` themselves."""
+    from utils import rates
+
+    async def unreachable():
+        raise rates.RateError("network is disabled in tests")
+
+    rates.reset()
+    monkeypatch.setattr(rates, "fetch_cbu", unreachable)
+    yield
+    rates.reset()
+
+
+@pytest.fixture(autouse=True)
 async def clean_db():
     async with engine.begin() as conn:
         for table in reversed(Base.metadata.sorted_tables):

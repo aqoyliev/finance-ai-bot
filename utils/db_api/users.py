@@ -2,7 +2,7 @@ from datetime import date
 from decimal import Decimal
 from typing import List, Optional
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .base import session_factory
@@ -68,6 +68,13 @@ async def set_usd_rate(user_id: int, rate: Decimal) -> None:
             else:
                 row.rate = str(value)
                 row.updated_at = updated_at
+
+
+async def clear_usd_rate(user_id: int) -> bool:
+    """Remove the manual rate override (the official rate applies again). False if there was none."""
+    async with session_factory() as session, session.begin():
+        result = await session.execute(delete(ExchangeRate).where(ExchangeRate.user_id == user_id))
+    return result.rowcount > 0
 
 
 # ---- Automatic AI advice ----

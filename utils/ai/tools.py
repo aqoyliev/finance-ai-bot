@@ -50,7 +50,7 @@ TOOLS: List[dict] = [
           "Income, expenses and balance per currency for one financial period (from salary day to salary day), "
           "expenses by category with share and change versus the comparison window (the same number of days of "
           "the previous period while a period is running, the whole previous period otherwise), a combined UZS "
-          "total when a USD rate is set, and budget usage in that period. Start here for questions about a "
+          "total when a USD rate is known, and budget usage in that period. Start here for questions about a "
           "month or a period.",
           {"period_offset": _OFFSET}),
     _tool("get_category_breakdown",
@@ -79,10 +79,12 @@ TOOLS: List[dict] = [
           "and the share of the limit used."),
     _tool("get_budgets",
           "Monthly category budgets (limits) of the current financial period with spent amount, percent used "
-          "and what is left. Spending in the other currency is converted at the user's USD rate."),
+          "and what is left. Spending in the other currency is converted at the USD rate in use (get_exchange_rate)."),
     _tool("get_categories", "The user's expense categories with their subcategories, and income categories."),
     _tool("get_exchange_rate",
-          "The USD -> UZS rate the user set with /rate (used for combined totals), or null if none is set."),
+          "The USD -> UZS rate in use with its source and date: the official Central Bank of Uzbekistan rate, or "
+          "the user's own override set with /rate (used for combined totals). usd_to_uzs is null if no rate is "
+          "known. This is the only source for exchange rates; never quote one from memory."),
 ]
 
 TOOL_NAMES = tuple(tool["name"] for tool in TOOLS)
@@ -176,8 +178,9 @@ async def get_period_summary(user_id: int, period_offset: int) -> dict:
     }
     if report.combined:
         combined = report.combined
+        info = rate_json(await db.get_usd_rate_info(user_id))
         result["combined_in_uzs"] = _clean({
-            "usd_rate": str(combined.rate), "income": amount(combined.income), "expense": amount(combined.expense),
+            "usd_rate": str(combined.rate), "usd_rate_source": info["source"], "usd_rate_date": info["date"], "income": amount(combined.income), "expense": amount(combined.expense),
             "balance": amount(combined.balance), "comparison_expense": amount(combined.prev_expense),
             "expense_change_pct": combined.expense_change})
     if report.budgets:
@@ -273,9 +276,18 @@ async def get_categories(user_id: int) -> dict:
     return {"expense": expense, "income": income}
 
 
+def rate_json(info: Optional[db.UsdRate]) -> dict:
+    """The rate in use with its source and date, for tool results and prompts (None: no rate is known)."""
+    if info is None:
+        return {"usd_to_uzs": None, "source": None, "date": None}
+    official = info.source == "cbu"
+    return {"usd_to_uzs": str(info.rate),
+            "source": "Central Bank of Uzbekistan official rate" if official else "set manually by the user (/rate)",
+            "date": info.day.isoformat() if info.day else None}
+
+
 async def get_exchange_rate(user_id: int) -> dict:
-    rate = await db.get_usd_rate(user_id)
-    return {"usd_to_uzs": str(rate) if rate else None}
+    return rate_json(await db.get_usd_rate_info(user_id))
 
 
 _HANDLERS = {

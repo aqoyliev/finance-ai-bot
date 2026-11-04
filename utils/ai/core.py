@@ -177,6 +177,8 @@ free text (input_type "text"); spoken numbers ("yigirma besh ming", "двадц�
 - amount: a plain decimal string without thousands separators. Uzbek amounts are written like \
 "125 000,00", "125.000" or "125,000" - all of these mean 125000. "18 ming"/"18 тысяч"/"18k" = 18000, \
 "12 mln"/"12 млн"/"12m" = 12000000. "so'm", "сум", "sum", "UZS" mean UZS; "$", "dollar", "USD" mean USD.
+Keep the amount in the currency it is written in: never convert between currencies and never state an \
+exchange rate (you do not know today's rate).
 - Bank SMS: "Pokupka"/"Oplata"/"Списание"/"To'lov"/"Xarid" = expense; "Popolnenie"/"Пополнение"/\
 "Зачисление"/"Kirim"/"Tushum" = income. The balance ("Balans"/"Остаток") is NOT the amount. Card digits \
 like "*1234" or "8600 **** **** 1234" give card_last4.

@@ -62,8 +62,9 @@ in `utils/db_api/operations.py`.
 does not fit Telegram's 1024-character caption limit it is sent as a separate message right after the photo.
 
 - Per currency: income, expenses, balance (transfers are never counted), then expenses by category, biggest first,
-  with the share of the total and the change versus the previous period. USD and UZS are shown separately; if a
-  rate is set (`/rate 1 USD 12700 UZS`) an approximate combined total in UZS is added and the chart sums both in UZS.
+  with the share of the total and the change versus the previous period. USD and UZS are shown separately; when
+  a USD rate is known (see [USD exchange rate](#usd-exchange-rate)) an approximate combined total in UZS is added and the
+  chart sums both in UZS.
 - **Comparison rule:** while the period is still running it is compared with the *same number of days* from the
   start of the previous period (day 10 of this month vs days 1-10 of the last one); a finished period is
   compared with the whole previous one. The note under the report shows the compared dates.
@@ -101,11 +102,29 @@ back to the matplotlib chart, then to text; a failed browser start is retried af
 Setup: `pip install -r requirements.txt`, then `python -m playwright install chromium`. In Docker use
 `playwright install --with-deps chromium` (it also installs the system libraries Chromium needs).
 
+### USD exchange rate
+
+By default the bot uses the **official rate of the Central Bank of Uzbekistan** (`https://cbu.uz/uz/arkhiv-kursov-valyut/json/USD/`,
+the `Rate` and `Date` of the `USD` item). `utils/rates.py` fetches it with aiohttp (10 s timeout), caches it in memory for 6 hours
+and stores the last good value in the `official_rates` table, so a restart or a CBU outage still has a rate. A background
+task (started in `on_startup`, cancelled on shutdown) refreshes it at startup and then every 6 hours (every 30 minutes
+after a failure); a failed fetch only logs a warning and keeps the last value. If no rate was ever received (CBU
+unreachable on the very first start) combined totals and cross-currency budget amounts are simply skipped.
+
+- `/rate` shows the rate in use and its source: `Markaziy bank, dd.mm.yyyy` (official) or `qo'lda` (manual).
+- `/rate 1 USD 12850 UZS` sets your own override (the example value is a placeholder); `/rate auto` (also `avto` / `авто`)
+  removes it and returns to the Central Bank rate.
+- The AI assistant never states a rate from memory: the rate, its source and date are put into the context line and the
+  `get_exchange_rate` tool result (and into the advice figures), and the system prompts forbid quoting any other.
+
+Migration `0006` creates `official_rates` and deletes all existing manual rates (`exchange_rates`), so everyone starts
+on the Central Bank rate.
+
 ### Budgets and alerts
 
 Settings → 🎯 Budgets: pick an expense category, then set, change or remove its monthly limit (UZS or USD; the month
 is the financial period). The report shows `spent / limit`, the percentage and a progress bar for every budget.
-Spending in the other currency counts towards a budget when a USD rate is set.
+Spending in the other currency counts towards a budget at the USD rate in use (see [USD exchange rate](#usd-exchange-rate)); without any known rate it is not converted.
 
 After an expense is saved (manually or from AI input), edited (amount, category or account) or after a
 transfer touches a credit card, the bot checks the budgets of the affected categories and the affected credit cards
@@ -224,7 +243,7 @@ How it works (`utils/ai/assistant.py`, `utils/ai/tools.py`): the analysis model 
 `claude-opus-5-5`) gets
 read-only **client-side tools** backed by the service layer instead of a database dump:
 `get_period_summary`, `get_category_breakdown`, `search_transactions`, `get_accounts`, `get_budgets`,
-`get_categories`, `get_exchange_rate` (strict JSON schemas; results are compact JSON with amounts and
+`get_categories`, `get_exchange_rate` (the official or manual rate with its source and date; strict JSON schemas; results are compact JSON with amounts and
 currency; transfers are never income or expense; Gemini gets them as function declarations). The bot runs
 the tool loop itself (at most 6 model requests
 and 4 minutes per question) and answers in your language as plain text. The conversation is kept in memory
@@ -404,7 +423,7 @@ The Claude and Gemini SDKs are mocked, so no API key is needed and no requests a
 ├── middlewares/           # access (ADMINS only), language, throttling
 ├── states/                # FSM states
 ├── filters/               # custom filters
-├── migrations/            # alembic migrations
+├── migrations/            # alembic migrations (0006: official rates)
 ├── webapp/                # Mini App page: index.html, app.css, app.js (no build step)
 ├── tests/                 # pytest suite (service layer, reports / alerts / charts, AI parsing with mocked Claude / Gemini clients)
 └── utils/
@@ -415,6 +434,7 @@ The Claude and Gemini SDKs are mocked, so no API key is needed and no requests a
     ├── miniapp/           # Mini App web server (aiohttp), JSON API, initData validation
     ├── misc/              # logging, throttling decorator
     ├── notify_admins.py   # start-up notification
+    ├── rates.py           # official USD rate of the Central Bank of Uzbekistan (fetch, cache, background refresh)
     ├── notify_alerts.py   # sends limit alerts after operations are saved / edited
     └── set_bot_commands.py
 ```

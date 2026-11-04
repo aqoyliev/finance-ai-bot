@@ -15,8 +15,8 @@ from .operations import (Leg, OperationView, SavedOperation, delete_operation, f
 from .insights import (AccountActivity, ExpenseRow, RangeSummary, SearchResult, TxRow,  # noqa: F401
                        account_activity, expense_rows, has_operations, largest_expenses, range_summary,
                        search_transactions)
-from .reports import (BudgetUsage, PeriodReport, Report, build_period_report, build_report,  # noqa: F401
-                      comparison_window, expense_by_subcategory, get_usd_rate, period_bounds, period_start,
-                      period_totals, shift_period)
-from .users import (ADVICE_KINDS, get_language, get_user, list_users, mark_advice_sent,  # noqa: F401
+from .reports import (BudgetUsage, PeriodReport, Report, UsdRate, build_period_report, build_report,  # noqa: F401
+                      comparison_window, expense_by_subcategory, get_usd_rate, get_usd_rate_info,
+                      period_bounds, period_start, period_totals, shift_period)
+from .users import (ADVICE_KINDS, clear_usd_rate, get_language, get_user, list_users, mark_advice_sent,  # noqa: F401
                     set_language, set_salary_day, set_usd_rate, toggle_advice)

@@ -10,6 +10,7 @@ from utils import cards
 from utils.advice_scheduler import scheduler
 from utils.db_api.base import init_db
 from utils.miniapp import server as miniapp
+from utils.rates import updater as rate_updater
 from utils.notify_admins import on_startup_notify
 from utils.set_bot_commands import set_default_commands
 
@@ -30,6 +31,9 @@ async def on_startup(dispatcher):
     except Exception:  # noqa: BLE001
         logging.getLogger(__name__).warning("Could not read the bot username for report cards", exc_info=True)
 
+    # Official USD rate of the Central Bank: fetched now, then every 6 hours (a failure keeps the last value)
+    rate_updater.start()
+
     # Weekly / monthly AI advice (also sends advice missed today while the bot was down)
     scheduler.start()
 
@@ -40,6 +44,7 @@ async def on_startup(dispatcher):
 
 async def on_shutdown(dispatcher):
     await scheduler.stop()
+    await rate_updater.stop()
     await miniapp.stop()
     # The headless Chromium of the report cards (started on the first card)
     await cards.close_renderer()

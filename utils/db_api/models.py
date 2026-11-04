@@ -98,6 +98,16 @@ class ExchangeRate(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime)
 
 
+class OfficialRate(Base):
+    """Last good official (Central Bank of Uzbekistan) rate, one row per currency (USD -> UZS); see utils/rates.py."""
+    __tablename__ = "official_rates"
+
+    currency: Mapped[str] = mapped_column(String(3), primary_key=True)
+    rate: Mapped[str] = mapped_column(String)  # UZS per 1 unit, Decimal as string
+    rate_date: Mapped[date] = mapped_column(Date)  # the date the Central Bank set the rate for
+    fetched_at: Mapped[datetime] = mapped_column(DateTime)  # naive UTC
+
+
 class Budget(Base):
     """Monthly spending limit of one expense category (the month starts on the user's salary day)."""
     __tablename__ = "budgets"
