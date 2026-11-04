@@ -115,7 +115,9 @@ async def new_account_limit(message: types.Message, state: FSMContext, lang: str
 
 
 async def create_from_form(message: types.Message, state: FSMContext, lang: str, opening: int):
+    from . import ai_input  # imported late: ai_input registers its handlers after this module
     data = await state.get_data()
+    pending = data.get(ai_input.PENDING_KEY)  # AI operations that were waiting for an account
     await state.finish()
     try:
         account = await db.create_account(message.from_user.id, data["new_name"], data["new_kind"],
@@ -124,6 +126,9 @@ async def create_from_form(message: types.Message, state: FSMContext, lang: str,
         await message.answer(t("session_lost", lang))
         return
     await render_account(message, account, lang, edit=False, notice=t("account_created", lang))
+    if pending:
+        await state.update_data({ai_input.PENDING_KEY: pending})
+        await ai_input.finish_pending(message, state, lang, message.from_user.id, account)
 
 
 @dp.message_handler(state=AccountForm.debt)

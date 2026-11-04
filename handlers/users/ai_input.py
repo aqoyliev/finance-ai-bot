@@ -17,6 +17,7 @@ AIDraft.account) is set. It is registered after the reply-keyboard handlers and 
 Voice messages and audio files need audio input, which only the Gemini provider has: the audio is transcribed
 and extracted in one call. With AI_PROVIDER=claude they get a localized hint.
 """
+import contextlib
 import logging
 import re
 from html import escape
@@ -26,9 +27,12 @@ from aiogram import types
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters import Text
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.utils.exceptions import TelegramAPIError
 
+from keyboards.default.menu import main_keyboard
+from keyboards.inline import finance as fin_kb
 from loader import bot, dp
-from states.finance import AIDraft
+from states.finance import AccountForm, AIDraft
 from utils.ai import core as ai
 from utils.ai import parser
 from utils.ai.parser import Draft
@@ -58,12 +62,20 @@ class Replier:
         self.message = message
         self.edit_next = edit_first
 
-    async def __call__(self, text: str, markup: Optional[InlineKeyboardMarkup] = None) -> None:
-        if self.edit_next:
+    async def __call__(self, text: str, markup: Optional[InlineKeyboardMarkup] = None,
+                       menu_lang: Optional[str] = None) -> None:
+        """menu_lang: attach the reply keyboard (when there is no inline markup). A reply keyboard cannot ride on
+        an edited message, so the status message is then replaced by a new one."""
+        keyboard = main_keyboard(menu_lang) if menu_lang and markup is None else None
+        if self.edit_next and keyboard is None:
             self.edit_next = False
             await self.message.edit_text(text, reply_markup=markup)
-        else:
-            await self.message.answer(text, reply_markup=markup)
+            return
+        if self.edit_next:
+            self.edit_next = False
+            with contextlib.suppress(TelegramAPIError):
+                await self.message.delete()
+        await self.message.answer(text, reply_markup=markup or keyboard)
 
 
 # ---- Input: analysis ----
@@ -97,7 +109,7 @@ async def analyze(message: types.Message, state: FSMContext, lang: str, text: Op
             source_ref = None  # typed text may honestly repeat ("coffee 18000" every day); an SMS may not
     drafts = parser.parse_response(raw, ctx, now, source_ref)
     if not drafts:
-        await status.edit_text(t("ai_nothing_found", lang))
+        await Replier(status, edit_first=True)(t("ai_nothing_found", lang), menu_lang=lang)
         return
     await state.finish()
     await process(Replier(status, edit_first=True), state, lang, user_id, drafts)
@@ -145,7 +157,7 @@ async def save_drafts(reply: Replier, lang: str, user_id: int, drafts: List[Draf
         parts = [operation_card(saved, lang)] + over_limit_warning(saved.over_limit, lang)
         if duplicate == "similar":
             parts.append(t("ai_duplicate", lang))
-        await reply("\n\n".join(parts))
+        await reply("\n\n".join(parts), menu_lang=lang)
         saved_ops.append(saved)
     return saved_ops
 
@@ -161,19 +173,33 @@ def pending_line(draft: Draft, lang: str) -> str:
     return f"• {amount}" + (f" — {label}" if label else "")
 
 
-async def ask_account(reply: Replier, state: FSMContext, lang: str, user_id: int, drafts: List[Draft]) -> None:
+def account_markup(accounts, lang: str) -> InlineKeyboardMarkup:
+    rows = [[InlineKeyboardButton(f"{a.name} ({a.currency})", callback_data=f"ai:acc:{a.id}")] for a in accounts]
+    rows.append([InlineKeyboardButton(t("btn_ai_new_account", lang), callback_data="ai:newacc")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+async def pending_accounts(user_id: int, drafts: List[Draft]):
+    """The accounts that can take the waiting operations (of their currency, when it is one)."""
     currencies = {d.currency for d in drafts}
     only = currencies.pop() if len(currencies) == 1 else None
-    accounts = await db.list_accounts(user_id, only) if only else await db.list_accounts(user_id)
+    return await db.list_accounts(user_id, only) if only else await db.list_accounts(user_id)
+
+
+async def ask_account(reply: Replier, state: FSMContext, lang: str, user_id: int, drafts: List[Draft]) -> None:
+    accounts = await pending_accounts(user_id, drafts)
     if not accounts:
-        await reply(t("no_accounts_in_currency", lang, currency=only or "UZS / USD"))
+        currencies = {d.currency for d in drafts}
+        await reply(t("no_accounts_in_currency", lang,
+                      currency=currencies.pop() if len(currencies) == 1 else "UZS / USD"))
         return
     await state.update_data({PENDING_KEY: [d.to_dict() for d in drafts]})
+    if len(accounts) == 1:  # nothing to choose from: save to the only account
+        await apply_account(reply, state, lang, user_id, accounts[0])
+        return
     await state.set_state(AIDraft.account)
-    markup = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(f"{a.name} ({a.currency})", callback_data=f"ai:acc:{a.id}")] for a in accounts])
     lines = [t("ai_ask_account", lang)] + [escape(pending_line(d, lang), quote=False) for d in drafts]
-    await reply("\n".join(lines), markup)
+    await reply("\n".join(lines), account_markup(accounts, lang))
 
 
 async def apply_account(reply: Replier, state: FSMContext, lang: str, user_id: int, account) -> None:
@@ -208,16 +234,48 @@ async def choose_account(call: types.CallbackQuery, state: FSMContext, lang: str
     await apply_account(Replier(call.message, edit_first=True), state, lang, call.from_user.id, account)
 
 
+@dp.callback_query_handler(Text(equals="ai:newacc"), state=AIDraft.account)
+async def new_account(call: types.CallbackQuery, state: FSMContext, lang: str):
+    """Add a card while operations wait: the pending drafts stay in FSM data and go to the new account."""
+    await call.answer()
+    await AccountForm.name.set()  # does not clear the FSM data
+    await call.message.edit_text(t("ask_account_name", lang), reply_markup=fin_kb.amount_prompt(lang, quick=False))
+
+
+async def finish_pending(message: types.Message, state: FSMContext, lang: str, user_id: int, account) -> None:
+    """After a card was created from the account question: save the waiting operations to it, or ask again."""
+    drafts = [Draft.from_dict(d) for d in (await state.get_data()).get(PENDING_KEY) or []]
+    if not drafts:
+        await state.finish()
+        return
+    if all(not d.currency or d.currency == account.currency for d in drafts):
+        await apply_account(Replier(message, edit_first=False), state, lang, user_id, account)
+    else:  # e.g. a USD amount and a new UZS card: ask again, the new card is among the buttons
+        await ask_account(Replier(message, edit_first=False), state, lang, user_id, drafts)
+
+
+async def hint_account(message: types.Message, state: FSMContext, lang: str) -> None:
+    drafts = [Draft.from_dict(d) for d in (await state.get_data()).get(PENDING_KEY) or []]
+    accounts = await pending_accounts(message.from_user.id, drafts)
+    await message.answer(t("ai_pick_account", lang), reply_markup=account_markup(accounts, lang))
+
+
 async def typed_account(message: types.Message, state: FSMContext, lang: str) -> bool:
     """While an account is asked for, a short typed name ("naqd", "uob") answers it. True if handled."""
     text = message.text or ""
-    if await state.get_state() != AIDraft.account.state or re.search(r"\d", text) or len(text) > 40:
+    if await state.get_state() != AIDraft.account.state:
         return False
+    if re.search(r"\d", text):  # digits: a new operation, analyzed as usual
+        return False
+    if len(text) > 40 or len(text.split()) > 3:  # a sentence is not an account name
+        await hint_account(message, state, lang)
+        return True
     ctx = await parser.load_context(message.from_user.id)
     match = parser.match_account(ctx, hint=text)
     account = await db.get_account(message.from_user.id, match.id) if match else None
     if account is None:
-        return False
+        await hint_account(message, state, lang)  # not an account name and no operation in it
+        return True
     await apply_account(Replier(message, edit_first=False), state, lang, message.from_user.id, account)
     return True
 

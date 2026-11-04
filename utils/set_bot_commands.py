@@ -2,7 +2,7 @@ from aiogram import types
 
 from utils.i18n import LANGUAGES, t
 
-COMMANDS = ("start", "expense", "income", "transfer", "salaryday", "rate", "help")
+COMMANDS = ("start", "expense", "income", "transfer", "salaryday", "rate", "report", "balance", "settings", "help")
 
 
 async def set_default_commands(dp):

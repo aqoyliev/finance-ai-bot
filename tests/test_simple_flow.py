@@ -98,6 +98,9 @@ class FakeMessage:
     async def answer(self, text, reply_markup=None, **kwargs):
         self.sent.append((text, reply_markup))
 
+    async def delete(self):
+        self.deleted = True
+
 
 @pytest.fixture
 def flow(monkeypatch):
@@ -120,7 +123,7 @@ async def test_resolved_account_is_saved_at_once_with_fallback_category(flow):
     drafts = [parser.Draft(kind="expense", amount_minor=1_800_000, currency="UZS", account_id=cash.id, note="cafe")]
     await ai_input.process(ai_input.Replier(msg, edit_first=True), state, "en", USER, drafts)
     [(text, markup)] = msg.sent
-    assert text.startswith("💸 <b>EXPENSE</b>") and "<b>Category:</b> Other" in text and markup is None
+    assert text.startswith("💸 <b>EXPENSE</b>") and "<b>Category:</b> Other" in text and markup.keyboard  # reply keyboard attached
     assert await balance(cash.id) == 100_000 - 1_800_000
     assert len(alerts) == 1 and await state.get_state() is None
     [view] = await db.recent_operations(USER)
@@ -144,7 +147,7 @@ async def test_missing_account_asked_once_for_all_and_applied(flow):
     question, markup = msg.sent[2]
     assert question.startswith("💳 Which payment method?") and "25 000 UZS — Transport › Taxi" in question
     buttons = [b.callback_data for row in markup.inline_keyboard for b in row]
-    assert buttons == [f"ai:acc:{a.id}" for a in await db.list_accounts(USER)]  # one per account, nothing else
+    assert buttons == [f"ai:acc:{a.id}" for a in await db.list_accounts(USER)] + ["ai:newacc"]  # last: add a card
     assert await state.get_state() == "AIDraft:account"
 
     answer = FakeMessage()
@@ -192,9 +195,7 @@ async def test_typed_account_name_answers_the_question(flow, monkeypatch):
 # ---- Menu ----
 
 def test_reply_keyboard_and_handler_order():
-    from aiogram.dispatcher.filters import Text
-
-    from keyboards.default.menu import labels, main_keyboard
+    from keyboards.default.menu import main_keyboard
     from loader import dp
     import handlers  # noqa: F401  (registers everything in order)
 
@@ -208,9 +209,8 @@ def test_reply_keyboard_and_handler_order():
     for other in ("handlers.users.ai_input.text_input", "handlers.users.finance.typed_amount",
                   "handlers.users.accounts.new_account_name", "handlers.users.echo.bot_fallback"):
         assert names.index(other) > menu_last, other
-    menu_filters = [f for h in dp.message_handlers.handlers if h.handler.__module__ == "handlers.users.menu"
-                    for f in h.filters if isinstance(f.filter, Text)]
-    assert {text for f in menu_filters for text in f.filter.equals} >= set(labels("kb_balance"))
+    # report, balance and settings: each has a button-text handler and a command handler
+    assert sum(h.handler.__module__ == "handlers.users.menu" for h in dp.message_handlers.handlers) == 6
 
 
 def test_settings_keyboard_reaches_history():
@@ -218,3 +218,132 @@ def test_settings_keyboard_reaches_history():
 
     data = [b.callback_data for row in kb.settings("en").inline_keyboard for b in row]
     assert data == ["menu:accounts", "bud:list", "menu:history", "set:advice", "set:lang"]
+
+
+def test_menu_words_match_in_any_language_case_and_emoji():
+    from keyboards.default.menu import is_menu_text, normalize
+
+    class Msg:
+        def __init__(self, text):
+            self.text = text
+
+    expected = {"kb_settings": ["Settings", "settings", "⚙️ Sozlamalar", "SOZLAMALAR", "настройки", "⚙ Настройки"],
+                "kb_report": ["report", "Hisobot", "📊 Hisobot", "отчет", "Отчёт", "📊 отчёт"],
+                "kb_balance": ["balance", "balans", "💳 Balans", "баланс", "БАЛАНС"]}
+    for key, texts in expected.items():
+        match = is_menu_text(key)
+        assert all(match(Msg(text)) for text in texts), key
+        assert not match(Msg("taxi 25000")) and not match(Msg(None)) and not match(Msg("settings 5"))
+    assert normalize("⚙️ Sozlamalar") == "sozlamalar" and normalize("📊 Отчёт") == "отчет"
+
+
+def test_default_account_is_only_cash():
+    from utils.db_api.defaults import DEFAULT_ACCOUNTS
+
+    for lang in LANGUAGES:
+        assert len(DEFAULT_ACCOUNTS[lang]) == 1 and DEFAULT_ACCOUNTS[lang][0][1:] == ("cash", "UZS")
+
+
+async def test_new_user_gets_one_cash_account():
+    await db.set_language(USER + 5, "new", "uz")
+    accounts = await db.list_accounts(USER + 5)
+    assert [(a.name, a.currency) for a in accounts] == [("Naqd pul", "UZS")]
+
+
+async def test_only_one_account_saves_without_asking(flow):
+    ai_input, state, alerts = flow
+    await db.set_language(USER, "owner", "uz")
+    [cash] = await db.list_accounts(USER)
+    msg = FakeMessage()
+    await ai_input.process(ai_input.Replier(msg, edit_first=True), state, "uz", USER,
+                           [parser.Draft(kind="expense", amount_minor=1_100_000, currency="UZS")])
+    assert len(msg.sent) == 1 and msg.sent[0][0].startswith("💸")
+    assert await state.get_state() is None and len(alerts) == 1
+    assert await balance(cash.id) == -1_100_000
+
+
+async def test_saved_card_carries_the_reply_keyboard_even_over_a_status_message(flow):
+    ai_input, state, alerts = flow
+    cash, card, credit, usd = await setup_user()
+    msg = FakeMessage()
+    await ai_input.process(ai_input.Replier(msg, edit_first=True), state, "en", USER,
+                           [parser.Draft(kind="expense", amount_minor=100_000, currency="UZS", account_id=cash.id)])
+    [(text, markup)] = msg.sent
+    assert getattr(msg, "deleted", False)  # the reply keyboard cannot ride on an edited message
+    assert [b.text for b in markup.keyboard[0]] == [t(k, "en") for k in ("kb_report", "kb_balance", "kb_settings")]
+
+
+async def _pending(ai_input, state):
+    cash, card, credit, usd = await setup_user()
+    await ai_input.process(ai_input.Replier(FakeMessage(), edit_first=True), state, "en", USER,
+                           [parser.Draft(kind="expense", amount_minor=100_000, currency="UZS", category="Health")])
+    return cash
+
+
+class Typed(FakeMessage):
+    text = ""
+    from_user = type("U", (), {"id": USER})()
+
+
+async def test_question_has_add_card_button_last(flow):
+    ai_input, state, alerts = flow
+    await _pending(ai_input, state)
+    message = Typed()
+    await ai_input.hint_account(message, state, "en")
+    [(text, markup)] = message.sent
+    assert text == t("ai_pick_account", "en")
+    assert markup.inline_keyboard[-1][0].callback_data == "ai:newacc"
+    assert markup.inline_keyboard[-1][0].text == t("btn_ai_new_account", "en")
+
+
+async def test_text_that_is_not_an_account_gets_a_hint_not_nothing_found(flow):
+    ai_input, state, alerts = flow
+    cash = await _pending(ai_input, state)
+    message = Typed()
+    message.text = "I do not have such cards"
+    assert await ai_input.typed_account(message, state, "en") is True
+    assert message.sent[0][0] == t("ai_pick_account", "en") and await state.get_state() == "AIDraft:account"
+    message.text = "x" * 60  # long text without digits
+    assert await ai_input.typed_account(message, state, "en") is True
+    message.text = "coffee 18000"  # a new operation: handled by the analysis
+    assert await ai_input.typed_account(message, state, "en") is False
+    assert await balance(cash.id) == 100_000
+
+
+async def test_card_added_from_the_question_receives_the_waiting_operation(flow):
+    ai_input, state, alerts = flow
+    await _pending(ai_input, state)
+    new = await db.create_account(USER, "My card", "debit", "UZS", opening_minor=500_000)
+    msg = FakeMessage()
+    await ai_input.finish_pending(msg, state, "en", USER, new)
+    assert msg.sent[0][0].startswith("💸") and "My card" in msg.sent[0][0]
+    assert await balance(new.id) == 400_000 and await state.get_state() is None and len(alerts) == 1
+
+
+async def test_card_in_another_currency_asks_again(flow):
+    ai_input, state, alerts = flow
+    cash, card, credit, usd = await setup_user()
+    await db.create_account(USER, "Second USD", "cash", "USD", opening_minor=0)  # two USD accounts: asked
+    await ai_input.process(ai_input.Replier(FakeMessage(), edit_first=True), state, "en", USER,
+                           [parser.Draft(kind="expense", amount_minor=100, currency="USD", category="Health")])
+    new = await db.create_account(USER, "New UZS", "debit", "UZS", opening_minor=0)
+    msg = FakeMessage()
+    await ai_input.finish_pending(msg, state, "en", USER, new)
+    [(text, markup)] = msg.sent
+    assert text.startswith("💳") and markup is not None and await state.get_state() == "AIDraft:account"
+
+
+async def test_nothing_found_reply_carries_the_reply_keyboard(flow):
+    ai_input, state, alerts = flow
+    msg = FakeMessage()
+    await ai_input.Replier(msg, edit_first=True)(t("ai_nothing_found", "uz"), menu_lang="uz")
+    [(text, markup)] = msg.sent
+    assert text == t("ai_nothing_found", "uz") and markup.keyboard[0][2].text == t("kb_settings", "uz")
+
+
+def test_new_commands_are_listed():
+    from utils.set_bot_commands import COMMANDS
+
+    assert {"report", "balance", "settings"} <= set(COMMANDS)
+    for name in COMMANDS:
+        assert all(t(f"cmd_{name}", lang) for lang in LANGUAGES)

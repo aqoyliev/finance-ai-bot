@@ -26,11 +26,16 @@ A private personal-finance bot for a single owner, built on this template.
 
 - 🔐 Private: only Telegram IDs listed in `ADMINS` can use it; anyone else gets one short "private bot" reply
 - 🌐 Uzbek (Latin), Russian and English. The language is chosen on the first `/start` and can be changed in
-  Settings. Starter accounts and categories are created once, in the language picked first
+  Settings. Starter categories and one account, Cash (UZS), are created once, in the language picked first; the
+  user adds their own cards in ⚙️ Settings → Accounts
 - ✍️ Operations are added by typing or speaking (see AI input below) and saved at once; `/expense`, `/income` and
   `/transfer` remain for manual entry (a purchase can be split across several accounts there)
 - ⌨️ A small reply keyboard instead of a menu: 📊 Report, 💳 Balance, ⚙️ Settings (accounts, budgets, history,
-  AI advice, language); it is shown after the language choice and on every `/start`
+  AI advice, language); it is shown after the language choice and on every `/start`, and also attached to the
+  "no operation found" reply and to saved-operation cards, so users who never re-ran `/start` get it. The buttons
+  also work as plain words in any language, any case, with or without the emoji (`settings`, `sozlamalar`,
+  `настройки`, `report`, `hisobot`, `отчет`, `balance`, `balans`, `баланс`), and `/settings`, `/report` and
+  `/balance` open the same screens
 - 🧾 Every saved operation is confirmed with a short card (see below)
 - 💳 Accounts (cash, debit, credit; UZS or USD): add, rename, change the opening balance or credit limit,
   deactivate (soft delete, history is kept). Credit cards show debt, limit and available credit
@@ -167,7 +172,10 @@ There is no confirmation step: every recognized operation is saved right away an
   name, a valid account), the operation is saved at once. Otherwise the bot asks only "💳 Which payment method?"
   with one button per account (of the operation's currency) and saves on tap; typing a short account name
   (`naqd`, `uob`) works too. When several operations of one message lack the account, it is asked once and the
-  answer applies to all of them.
+  answer applies to all of them. The last button, "➕ Add a new card", opens the add-account flow and the waiting
+  operations are saved to the new card (if its currency does not fit, the question is asked again). Other typed
+  text without digits gets a short hint ("pick a button or add a new card"); text with an operation in it is
+  analyzed as usual. With only one account there is nothing to ask: the operation is saved to it.
 - **Category.** An expense or income without a recognizable category goes to "Other" ("Boshqa" / "Прочее";
   "Other income" for incomes), created if the user has none.
 - **Amount.** An operation without an amount is not saved; the bot answers that no amount was understood.

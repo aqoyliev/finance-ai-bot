@@ -67,6 +67,9 @@ TEXTS = {
     "cmd_rate": {"uz": "Dollar kursi, masalan /rate 1 USD 12700 UZS",
                  "ru": "Курс доллара, например /rate 1 USD 12700 UZS",
                  "en": "Set USD rate, e.g. /rate 1 USD 12700 UZS"},
+    "cmd_settings": {"uz": "Sozlamalar", "ru": "Настройки", "en": "Settings"},
+    "cmd_report": {"uz": "Hisobot", "ru": "Отчёт", "en": "Report"},
+    "cmd_balance": {"uz": "Hisoblar balansi", "ru": "Баланс счетов", "en": "Account balances"},
     "cmd_help": {"uz": "Yordam", "ru": "Помощь", "en": "Help"},
     "language_changed": {
         "uz": "Til o'zgartirildi: o'zbekcha.",
@@ -570,6 +573,14 @@ TEXTS = {
     },
     "ai_ask_account": {
         "uz": "💳 Qaysi to'lov usuli?", "ru": "💳 Какой способ оплаты?", "en": "💳 Which payment method?",
+    },
+    "ai_pick_account": {
+        "uz": "💳 Tugmalardan birini tanlang yoki ➕ yangi karta qo'shing.",
+        "ru": "💳 Выберите одну из кнопок или ➕ добавьте новую карту.",
+        "en": "💳 Pick one of the buttons or ➕ add a new card.",
+    },
+    "btn_ai_new_account": {
+        "uz": "➕ Yangi karta qo'shish", "ru": "➕ Добавить новую карту", "en": "➕ Add a new card",
     },
     "ai_no_amount": {
         "uz": "🤖 Summani tushunmadim. Masalan: «taksi 25000 naqd».",

@@ -3,14 +3,11 @@
 Names become ordinary user data after seeding: changing the language later does not rename them.
 """
 
-# (name, kind, currency)
+# (name, kind, currency). Only cash: users add their own cards themselves (Settings -> Accounts).
 DEFAULT_ACCOUNTS = {
-    "en": [("Cash", "cash", "UZS"), ("Cash (USD)", "cash", "USD"), ("UOB", "debit", "UZS"),
-           ("Infinbank", "debit", "UZS"), ("Hamkorbank", "debit", "UZS"), ("Credit card", "credit", "UZS")],
-    "ru": [("Наличные", "cash", "UZS"), ("Наличные (USD)", "cash", "USD"), ("UOB", "debit", "UZS"),
-           ("Infinbank", "debit", "UZS"), ("Hamkorbank", "debit", "UZS"), ("Кредитная карта", "credit", "UZS")],
-    "uz": [("Naqd pul", "cash", "UZS"), ("Naqd pul (USD)", "cash", "USD"), ("UOB", "debit", "UZS"),
-           ("Infinbank", "debit", "UZS"), ("Hamkorbank", "debit", "UZS"), ("Kredit karta", "credit", "UZS")],
+    "en": [("Cash", "cash", "UZS")],
+    "ru": [("Наличные", "cash", "UZS")],
+    "uz": [("Naqd pul", "cash", "UZS")],
 }
 
 DEFAULT_CATEGORIES = {
