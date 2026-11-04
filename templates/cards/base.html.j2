@@ -1,0 +1,26 @@
+{#- Shared receipt layout: perforated paper on a striped table, header, stamp and footer. -#}
+<!doctype html>
+<html lang="{{ vm.lang }}">
+<head>
+<meta charset="utf-8">
+<style>{{ css | safe }}</style>
+</head>
+<body>
+<div class="tbl">
+<div class="paper">
+<div class="perf t"></div>
+<div class="perf b"></div>
+{%- if vm.stamp %}
+<div class="stamp {{ vm.stamp.tone }}"><div><b>{{ vm.stamp.main }}</b><span>{{ vm.stamp.sub }}</span></div></div>
+{%- endif %}
+<div class="head{% if vm.stamp %} stamped{% endif %}">
+<span class="h1">{{ vm.title }}</span>
+<span class="meta">{{ vm.dates }}</span>
+<span class="meta mute">{{ vm.meta }}</span>
+</div>
+{% block content %}{% endblock %}
+<div class="foot">{% if vm.footer_left %}<span>{{ vm.footer_left }}</span>{% endif %}<span class="r">{{ vm.footer_right }}</span></div>
+</div>
+</div>
+</body>
+</html>

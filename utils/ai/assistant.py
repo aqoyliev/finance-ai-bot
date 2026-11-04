@@ -213,7 +213,7 @@ async def ask(user_id: int, question: str, lang: str, turns: Optional[List[List[
 
 # ---- Advice ----
 
-def _windows(kind: str, today: date, salary_day: int):
+def advice_windows(kind: str, today: date, salary_day: int):
     """(start, end, compare_start, compare_end) of the advice window; ends are exclusive."""
     if kind == "weekly":  # the 7 days before today vs the 7 before those
         return today - timedelta(days=7), today, today - timedelta(days=14), today - timedelta(days=7)
@@ -286,7 +286,7 @@ INSTRUCTIONS = {
 async def advice_data(user_id: int, kind: str, today: date) -> Optional[dict]:
     """Pre-computed figures for the advice prompt, or None if the window has no income or expense."""
     user = await db.get_user(user_id)
-    start, end, compare_start, compare_end = _windows(kind, today, user.salary_day)
+    start, end, compare_start, compare_end = advice_windows(kind, today, user.salary_day)
     current = await db.range_summary(user_id, start, end)
     if not current.operations:
         return None

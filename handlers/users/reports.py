@@ -1,6 +1,8 @@
-"""Period report with a chart by category, subcategory drill-down and previous / next period navigation.
+"""Period report with a receipt card, subcategory drill-down and previous / next period navigation.
 
-A report screen is either a text message or a photo (the chart) whose caption is the text. Changing between
+The image is the receipt card (utils/cards.py); if Chromium cannot render it, the matplotlib chart is drawn
+instead, and without either the report is text only. A report screen is either a text message or a photo whose
+caption is the text. Changing between
 the two kinds means deleting the old message and sending a new one (see show_screen).
 """
 import asyncio
@@ -16,6 +18,7 @@ from aiogram.utils.exceptions import TelegramAPIError
 
 from keyboards.inline import reports as kb
 from loader import bot, dp
+from utils import cards
 from utils.charts import render_expense_chart
 from utils.db_api import finance as db
 from utils.i18n import t
@@ -32,8 +35,14 @@ _linked_photos: Dict[Tuple[int, int], int] = {}
 _MAX_LINKED = 100
 
 
+async def make_image(user_id: int, report: db.PeriodReport, lang: str) -> Optional[bytes]:
+    """The report card; the matplotlib chart if the card cannot be rendered; None for text only."""
+    card = await cards.report_card(user_id, report, lang)
+    return card if card is not None else await make_chart(report, lang)
+
+
 async def make_chart(report: db.PeriodReport, lang: str) -> Optional[bytes]:
-    """PNG of expenses by category, or None if there is nothing to draw or drawing failed."""
+    """Fallback PNG of expenses by category, or None if there is nothing to draw or drawing failed."""
     series = report.chart_series()
     if series is None:
         return None
@@ -112,7 +121,7 @@ async def render_report(call: types.CallbackQuery, offset: int, lang: str):
     if report.has_data:
         text += "\n\n" + t("report_tap_category", lang)
     markup = kb.report_view(report, await category_ids(user_id), lang)
-    chart = await make_chart(report, lang)
+    chart = await make_image(user_id, report, lang)
     await show_screen(call, text, markup, chart, caption=report_title(report, lang))
 
 

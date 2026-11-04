@@ -1,16 +1,20 @@
 """AI advice: Settings -> AI advice (weekly / monthly toggles) and the manual "Get advice now" button.
 
-The automatic weekly and monthly advice is sent by utils/advice_scheduler.py.
+The automatic weekly and monthly advice is sent by utils/advice_scheduler.py. Both send the advice with its
+receipt card (the running-period report card for "Get advice now").
 """
+import contextlib
 import logging
 
 from aiogram import types
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters import Text
+from aiogram.utils.exceptions import TelegramAPIError
 
 from keyboards.inline import ai as ai_kb
 from loader import dp
-from utils.advice_scheduler import advice_message
+from utils import cards
+from utils.advice_scheduler import advice_header, advice_message, send_advice
 from utils.ai import assistant, claude
 from utils.db_api import finance as db
 from utils.i18n import t
@@ -66,4 +70,11 @@ async def advice_now(call: types.CallbackQuery, lang: str):
     if result is None:
         await status.edit_text(t("advice_no_data", lang))
         return
-    await status.edit_text(advice_message(result, "now", lang), reply_markup=ai_kb.after_advice(lang))
+    text, markup = advice_message(result, "now", lang), ai_kb.after_advice(lang)
+    card = await cards.advice_card(call.from_user.id, "now", lang)
+    if card is None:
+        await status.edit_text(text, reply_markup=markup)
+        return
+    with contextlib.suppress(TelegramAPIError):
+        await status.delete()
+    await send_advice(call.message.chat.id, text, advice_header(result, "now", lang), card, markup)

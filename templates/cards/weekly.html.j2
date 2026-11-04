@@ -1,0 +1,23 @@
+{% extends "base.html.j2" %}
+{% import "macros.html.j2" as m %}
+{% block content %}
+<div class="dash"></div>
+{{ m.sections(vm) }}
+{%- for s in vm.sections %}
+<div class="dash"></div>
+{{ m.barcode(s.bars) }}
+{%- endfor %}
+{%- if vm.biggest or vm.budget_note %}
+<div class="dash"></div>
+{%- endif %}
+{%- if vm.biggest %}
+<span class="meta mute">{{ vm.labels.biggest }}</span>
+<div class="row" style="margin-top: 4px"><span class="nm" style="font-weight: 800">{{ vm.biggest.name }}</span><span class="am sx" style="font-weight: 800">{{ vm.biggest.suffix }}</span><span class="ld"></span><span class="am" style="font-weight: 800">{{ vm.biggest.amount }}</span></div>
+{%- endif %}
+{%- if vm.budget_note %}
+<span class="note{% if vm.budget_note.over %} up{% endif %}">{{ vm.budget_note.text }}</span>
+{%- endif %}
+{%- if vm.mixed %}
+<span class="note mute">{{ vm.labels.mixed_note }}</span>
+{%- endif %}
+{% endblock %}

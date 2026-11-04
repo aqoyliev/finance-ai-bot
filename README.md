@@ -58,11 +58,37 @@ does not fit Telegram's 1024-character caption limit it is sent as a separate me
   compared with the whole previous one. The note under the report shows the compared dates.
 - Tap a category for its subcategory breakdown; ◀ / ▶ move to the previous / next period (never into the future);
   the account balances are on 💳 ACCOUNTS.
-- The chart is a donut for up to 8 categories (tiny slices merged into "Other"), horizontal bars for more (top 9 +
-  "Other"). It is drawn by matplotlib (Agg backend, DejaVu Sans font, so Cyrillic and Uzbek letters render; emoji in
-  category names are dropped from the chart labels) in a worker thread. If drawing fails, or there are no
-  expenses, the report is sent as text only. With expenses in both currencies and no rate, only the first
-  currency (UZS) is charted.
+- The image is a receipt-style card (see below). Only if the card cannot be rendered, the old matplotlib chart is
+  sent instead: a donut for up to 8 categories (tiny slices merged into "Other"), horizontal bars for more (top 9 +
+  "Other"), DejaVu Sans, drawn in a worker thread (`utils/charts.py`). If that fails too, the report is text only.
+
+### Receipt cards
+
+The report image and the weekly / monthly advice come as receipt cards (`utils/cards.py`, templates in
+`templates/cards/`): Jinja2 HTML rendered to a 1080 px wide PNG (height follows the content) by headless Chromium
+through Playwright. The JetBrains Mono font is vendored in `assets/fonts/` (SIL OFL, `OFL.txt`) and embedded into
+the page, so rendering works offline.
+
+- **Weekly receipt** (with the Monday advice): categories with the change vs the previous week, total, a 7-day
+  barcode (biggest day in red), the biggest single expense with its weekday and the most-used budget.
+- **Monthly receipt** (with the advice on the salary day, for the period that just ended): up to 8 categories (the
+  rest folded into "Other"), total vs the previous period, income / expenses / balance, a barcode per 7 days, top 3
+  expenses, budgets as `[#######---]` bars and the payment method split (cash / debit / credit card) with credit
+  limit use.
+- **Report** (📊 REPORT, any period; also with "Get advice now"): categories with share bars and change, total vs the
+  previous period (or its same days), over-budget categories.
+- No expenses in the window: an "empty" receipt. Expenses in both UZS and USD: one section per currency, never
+  converted.
+
+The stamp shows the change of total spending (▲ red = spent more, ▼ blue = less). The advice text is the photo's
+caption when it fits 1024 characters, otherwise the photo is followed by the text as a message.
+
+One Chromium is started lazily on the first card, reused (at most 2 pages at a time) and closed on shutdown. If
+Playwright or Chromium is missing, crashes or a card takes longer than 25 s, the problem is logged and the bot falls
+back to the matplotlib chart, then to text; a failed browser start is retried after 5 minutes.
+
+Setup: `pip install -r requirements.txt`, then `python -m playwright install chromium`. In Docker use
+`playwright install --with-deps chromium` (it also installs the system libraries Chromium needs).
 
 ### Budgets and alerts
 

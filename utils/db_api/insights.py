@@ -152,3 +152,28 @@ async def has_operations(user_id: int, start: date, end: date) -> bool:
                                          Transaction.occurred_at >= day_start(start),
                                          Transaction.occurred_at < day_start(end)).limit(1))
     return found is not None
+
+
+@dataclass
+class ExpenseRow:
+    """One expense row with the kind of account it was paid from (a split purchase has several rows)."""
+    occurred_at: datetime
+    amount_minor: int
+    currency: str
+    category: Optional[str]
+    note: Optional[str]
+    group_id: str
+    account_kind: str  # cash | debit | credit
+
+
+async def expense_rows(user_id: int, start: date, end: date) -> List[ExpenseRow]:
+    """Every expense row in [start, end), oldest first (transfers are never expenses)."""
+    query = (select(Transaction.occurred_at, Transaction.amount_minor, Transaction.currency, Transaction.category,
+                    Transaction.note, Transaction.group_id, Account.kind)
+             .join(Account, Account.id == Transaction.account_id)
+             .where(Transaction.user_id == user_id, Transaction.kind == "expense",
+                    Transaction.occurred_at >= day_start(start), Transaction.occurred_at < day_start(end))
+             .order_by(Transaction.occurred_at, Transaction.id))
+    async with session_factory() as session:
+        result = (await session.execute(query)).all()
+    return [ExpenseRow(*row) for row in result]

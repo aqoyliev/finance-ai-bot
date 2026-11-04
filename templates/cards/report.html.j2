@@ -1,0 +1,19 @@
+{% extends "base.html.j2" %}
+{% import "macros.html.j2" as m %}
+{% block content %}
+<div class="dash"></div>
+{{ m.sections(vm, shares=True) }}
+{%- if vm.over_budget %}
+<div class="dash"></div>
+<div class="hd"><span class="sec">{{ vm.labels.over_budget }}</span><span class="n26 up" style="font-weight: 800">{{ vm.over_budget.count }}</span></div>
+<div class="rows r28" style="margin-top: 14px">
+{%- for r in vm.over_budget.rows %}
+<div class="row"><span class="nm">{{ r.name }}</span><span class="ld"></span><span class="am up">{{ r.amount }}</span><span class="pc up">{{ r.percent }}</span></div>
+{%- endfor %}
+</div>
+{%- endif %}
+{%- if vm.mixed %}
+<div class="dash"></div>
+<span class="meta mute">{{ vm.labels.mixed_note }}</span>
+{%- endif %}
+{% endblock %}

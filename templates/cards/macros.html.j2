@@ -1,0 +1,58 @@
+{#- Building blocks shared by the card templates. -#}
+
+{% macro change(c) -%}
+<span class="ch{% if c %} {{ c.tone }}{% endif %}">{% if c %}{{ c.text }}{% endif %}</span>
+{%- endmacro %}
+
+{% macro row(r, with_change=True) -%}
+<div class="row"><span class="nm">{{ r.name }}</span>{% if r.suffix is defined %}<span class="am sx">{{ r.suffix }}</span>{% endif %}<span class="ld"></span><span class="am">{{ r.amount }}</span>
+{%- if with_change %}{{ change(r.change) }}{% endif %}</div>
+{%- endmacro %}
+
+{% macro share_row(r) -%}
+<div class="item"><div class="row"><span class="nm">{{ r.name }}</span><span class="ld"></span><span class="am">{{ r.amount }}</span><span class="pc">{{ r.share }}</span></div><div class="blk"><span>{{ r.bar }}</span>{{ change(r.change) }}</div></div>
+{%- endmacro %}
+
+{#- Categories and totals of every currency: one block, or a block per currency when both are spent in. -#}
+{% macro sections(vm, heading=None, shares=False) -%}
+{%- if not vm.mixed %}
+{%- set s = vm.sections[0] %}
+{%- if heading %}<span class="sec">{{ heading }}</span>{% endif %}
+<div class="rows" style="{% if heading %}margin-top: 14px;{% endif %}{% if shares %}gap: 18px{% endif %}">
+{%- for r in s.rows %}
+{% if shares %}{{ share_row(r) }}{% else %}{{ row(r) }}{% endif %}
+{%- endfor %}
+</div>
+<div class="dash"></div>
+<div class="tot"><span class="lbl">{{ s.total_label }}</span><span class="big">{{ s.total }}</span></div>
+<div class="row meta mute" style="margin-top: 8px"><span class="pl">{{ s.prev_label }}</span><span class="ld lt"></span><span>{{ s.prev_total }}</span></div>
+{%- else %}
+{%- for s in vm.sections %}
+{%- if not loop.first %}<div class="dash"></div>{% endif %}
+<div class="cur"><span class="sec">{{ s.title }}</span><span class="tag">{{ s.currency }}</span></div>
+<div class="rows" style="margin-top: 14px">
+{%- for r in s.rows %}
+{{ row(r) }}
+{%- endfor %}
+</div>
+<div class="dbl"></div>
+<div class="tot"><span class="lbl s">{{ s.total_label }}</span><span class="mid">{{ s.total }}</span></div>
+<div class="row meta mute" style="margin-top: 6px"><span class="pl">{{ s.prev_label }}</span><span class="ld lt"></span><span>{{ s.prev_total }}</span>{{ change(s.prev_change) }}</div>
+{%- endfor %}
+{%- endif %}
+{%- endmacro %}
+
+{% macro barcode(b) -%}
+<span class="sec">{{ b.title }}</span>
+<div class="bars" style="grid-template-columns: repeat({{ b.bars | length }}, minmax(0, 1fr))">
+{%- for bar in b.bars %}
+<div class="bar{% if bar.hi %} hi{% endif %}" style="height: {{ bar.h }}px"></div>
+{%- endfor %}
+</div>
+<div class="lbls" style="grid-template-columns: repeat({{ b.bars | length }}, minmax(0, 1fr)); margin-top: 8px">
+{%- for bar in b.bars %}<span{% if bar.hi %} class="up"{% endif %}>{{ bar.label }}</span>{% endfor -%}
+</div>
+<div class="lbls mute" style="grid-template-columns: repeat({{ b.bars | length }}, minmax(0, 1fr))">
+{%- for bar in b.bars %}<span{% if bar.hi %} class="up"{% endif %}>{{ bar.value }}</span>{% endfor -%}
+</div>
+{%- endmacro %}

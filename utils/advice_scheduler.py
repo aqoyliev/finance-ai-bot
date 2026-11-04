@@ -8,18 +8,25 @@ start): a restart never sends twice, and if the bot was down at 09:00 the advice
 after start on the same day (a day missed completely is skipped, not sent late). A window with no income or
 expense is marked as handled without calling the AI. A failed AI call is retried after RETRY_AFTER, at most
 MAX_ATTEMPTS times per day (the counter is in memory). Turning a kind off only stops future sends.
+
+Every advice comes with the matching receipt card (utils/cards.py) as a photo; the advice text is its caption when
+it fits Telegram's caption limit, otherwise the photo carries the title and the text follows as a message. Without
+a card (the card and the fallback chart both failed) the advice is sent as text only, as before.
 """
 import asyncio
 import contextlib
+import io
 import logging
 from datetime import date, datetime, time, timedelta
 from html import escape
 from typing import Dict, List, Optional, Tuple
 
+from aiogram import types
 from aiogram.utils.exceptions import TelegramAPIError
 
 from keyboards.inline import ai as ai_kb
 from loader import bot
+from utils import cards
 from utils.ai import assistant, claude
 from utils.db_api import finance as db
 from utils.i18n import t
@@ -31,6 +38,8 @@ TICK_SECONDS = 60
 RETRY_AFTER = timedelta(minutes=20)
 MAX_ATTEMPTS = 3
 MESSAGE_LIMIT = 4096
+CAPTION_LIMIT = 1024  # Telegram's limit for a photo caption
+HTML = types.ParseMode.HTML  # the bot default does not apply to photo captions
 
 
 def due(user, now: datetime) -> List[Tuple[str, date]]:
@@ -47,15 +56,34 @@ def due(user, now: datetime) -> List[Tuple[str, date]]:
     return result
 
 
+def advice_header(result: assistant.Advice, kind: str, lang: str) -> str:
+    return t(f"advice_title_{kind}", lang, start=result.start.strftime("%d.%m"),
+             end=result.last_day.strftime("%d.%m.%Y"))
+
+
 def advice_message(result: assistant.Advice, kind: str, lang: str) -> str:
     """Localized header plus the (escaped) advice text, within Telegram's message limit."""
-    header = t(f"advice_title_{kind}", lang, start=result.start.strftime("%d.%m"),
-               end=result.last_day.strftime("%d.%m.%Y"))
+    header = advice_header(result, kind, lang)
     body = escape(result.text, quote=False)
     room = MESSAGE_LIMIT - len(header) - 2
     if len(body) > room:
         body = body[:room - 1].rstrip() + "…"
     return f"{header}\n\n{body}"
+
+
+async def send_advice(chat_id: int, text: str, header: str, card: Optional[bytes], markup) -> None:
+    """The advice with its card: the text as the photo caption if it fits, else the photo titled `header` followed
+    by the text with the keyboard. Without a card, or if Telegram rejects the photo, text only."""
+    if card is not None:
+        photo = types.InputFile(io.BytesIO(card), filename="advice.png")
+        try:
+            if len(text) <= CAPTION_LIMIT:
+                await bot.send_photo(chat_id, photo, caption=text, reply_markup=markup, parse_mode=HTML)
+                return
+            await bot.send_photo(chat_id, photo, caption=header, parse_mode=HTML)
+        except TelegramAPIError as err:
+            log.warning("Advice card was not sent to %s: %s", chat_id, err)
+    await bot.send_message(chat_id, text, reply_markup=markup, parse_mode=HTML)
 
 
 class AdviceScheduler:
@@ -68,8 +96,10 @@ class AdviceScheduler:
         """Generate and send one advice; marks it handled. Returns False if the window was empty."""
         result = await assistant.advice(user.id, kind, user.language, today=day)
         if result is not None:
-            await bot.send_message(user.id, advice_message(result, kind, user.language),
-                                   reply_markup=ai_kb.after_advice(user.language, settings=True))
+            card = await cards.advice_card(user.id, kind, user.language, today=day)
+            await send_advice(user.id, advice_message(result, kind, user.language),
+                              advice_header(result, kind, user.language), card,
+                              ai_kb.after_advice(user.language, settings=True))
         await db.mark_advice_sent(user.id, kind, day)
         return result is not None
 

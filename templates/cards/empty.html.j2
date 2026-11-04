@@ -1,0 +1,15 @@
+{% extends "base.html.j2" %}
+{% block content %}
+<div class="dash"></div>
+<div class="rows">
+{%- for _ in range(4) %}
+<div class="row"><span class="nm ph">— — —</span><span class="ld"></span><span class="am ph">0</span></div>
+{%- endfor %}
+</div>
+<div class="estamp"><div><b>{{ vm.empty.stamp }}</b><span>{{ vm.empty.when }}</span></div></div>
+<div class="dash"></div>
+<div class="tot"><span class="lbl">{{ vm.labels.total }}</span><span class="big">0</span></div>
+<div class="dash"></div>
+<span style="font-size: 30px; font-weight: 700">{{ vm.empty.text }}</span>
+<span class="meta mute" style="margin-top: 8px">{{ vm.empty.hint }}</span>
+{% endblock %}

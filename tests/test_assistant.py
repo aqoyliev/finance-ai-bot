@@ -486,6 +486,11 @@ class FakeBot:
 def fake_bot(monkeypatch):
     bot = FakeBot()
     monkeypatch.setattr(sched, "bot", bot)
+
+    async def no_card(*args, **kwargs):  # the card path is covered in test_cards.py
+        return None
+
+    monkeypatch.setattr(sched.cards, "advice_card", no_card)
     yield bot
     claude.set_client(None)
 

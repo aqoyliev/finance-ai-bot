@@ -1,0 +1,62 @@
+{% extends "base.html.j2" %}
+{% import "macros.html.j2" as m %}
+{% block content %}
+<div class="dash"></div>
+{{ m.sections(vm, heading=vm.labels.categories) }}
+{%- for b in vm.balances %}
+<div class="dash"></div>
+<div class="rows">
+<div class="row"><span class="nm">{{ vm.labels.income }}</span><span class="ld"></span><span class="am">{{ b.income }}</span></div>
+<div class="row"><span class="nm">{{ vm.labels.expense }}</span><span class="ld"></span><span class="am">{{ b.expense }}</span></div>
+</div>
+<div class="dbl" style="margin: 18px 0 12px"></div>
+<div class="tot"><span class="lbl" style="font-size: 36px">{{ vm.labels.balance }}{% if vm.mixed %} <span class="tag" style="vertical-align: middle">{{ b.currency }}</span>{% endif %}</span><span class="bal">{{ b.balance }}</span></div>
+{%- if b.prev_balance %}
+<span class="meta mute" style="margin-top: 6px">{{ b.prev_balance }}{% if b.prev_change %} <span class="{{ b.prev_change.tone }}" style="font-weight: 700">{{ b.prev_change.text }}</span>{% endif %}</span>
+{%- endif %}
+{%- endfor %}
+{%- for s in vm.sections %}
+<div class="dash"></div>
+{{ m.barcode(s.bars) }}
+{%- endfor %}
+{%- if vm.top %}
+<div class="dash"></div>
+<span class="sec">{{ vm.labels.biggest_list }}</span>
+<div class="rows" style="margin-top: 14px">
+{%- for r in vm.top %}
+{{ m.row(r, with_change=False) }}
+{%- endfor %}
+</div>
+{%- endif %}
+{%- if vm.budgets %}
+<div class="dash"></div>
+<div class="hd"><span class="sec">{{ vm.labels.budgets }}</span>{% if vm.budgets.over %}<span class="n26 up" style="font-weight: 800">{{ vm.budgets.over }}</span>{% endif %}</div>
+<div class="rows r28" style="margin-top: 14px">
+{%- for r in vm.budgets.rows %}
+<div class="row"><span class="nm">{{ r.name }}</span><span class="ld"></span><span class="asc{% if r.over %} up{% endif %}">{{ r.ascii }}</span><span class="pc{% if r.over %} up{% endif %}">{{ r.percent }}</span></div>
+{%- endfor %}
+</div>
+{%- endif %}
+{%- for p in vm.payments %}
+<div class="dash"></div>
+<div class="hd"><span class="sec">{{ vm.labels.payment }}</span>{% if vm.mixed %}<span class="tag">{{ p.currency }}</span>{% endif %}</div>
+<div class="strip">
+{%- for part in p.parts %}
+<div class="{{ part.kind }}" style="{% if loop.last %}flex: 1 1 auto{% else %}width: {{ part.width }}%{% endif %}"></div>
+{%- endfor %}
+</div>
+<div class="rows r28" style="margin-top: 16px">
+{%- for part in p.parts %}
+<div class="row"><span class="sw {{ part.kind }}"></span><span class="nm">{{ part.name }}</span><span class="ld"></span><span class="am">{{ part.amount }}</span><span class="pc">{{ part.percent }}</span></div>
+{%- endfor %}
+</div>
+{%- if p.credit %}
+<div class="row meta" style="margin-top: 18px"><span class="mute pl">{{ vm.labels.credit_limit }}</span><span class="ld lt"></span><span style="font-weight: 700; white-space: nowrap">{{ p.credit.used }}</span></div>
+<div class="row meta" style="margin-top: 6px; justify-content: flex-end"><span class="asc{% if p.credit.over %} up{% endif %}">{{ p.credit.ascii }}</span><span class="pc{% if p.credit.over %} up{% endif %}">{{ p.credit.percent }}</span></div>
+{%- endif %}
+{%- endfor %}
+{%- if vm.mixed %}
+<div class="dash"></div>
+<span class="meta mute">{{ vm.labels.mixed_note }}</span>
+{%- endif %}
+{% endblock %}
