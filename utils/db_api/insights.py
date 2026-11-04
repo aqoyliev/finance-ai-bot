@@ -177,3 +177,25 @@ async def expense_rows(user_id: int, start: date, end: date) -> List[ExpenseRow]
     async with session_factory() as session:
         result = (await session.execute(query)).all()
     return [ExpenseRow(*row) for row in result]
+
+
+@dataclass
+class AccountActivity:
+    """One account for the Mini App: income / expense in [start, end) and its newest rows (transfers too)."""
+    expense_minor: int
+    income_minor: int
+    recent: List[Transaction]
+
+
+async def account_activity(user_id: int, account_id: int, start: date, end: date,
+                           limit: int = 10) -> AccountActivity:
+    in_range = (Transaction.user_id == user_id, Transaction.account_id == account_id,
+                Transaction.occurred_at >= day_start(start), Transaction.occurred_at < day_start(end))
+    async with session_factory() as session:
+        totals = dict((await session.execute(
+            select(Transaction.kind, func.sum(Transaction.amount_minor))
+            .where(*in_range, Transaction.kind.in_(OPERATION_KINDS)).group_by(Transaction.kind))).all())
+        recent = list(await session.scalars(
+            select(Transaction).where(Transaction.user_id == user_id, Transaction.account_id == account_id)
+            .order_by(Transaction.occurred_at.desc(), Transaction.id.desc()).limit(limit)))
+    return AccountActivity(int(totals.get("expense") or 0), int(totals.get("income") or 0), recent)

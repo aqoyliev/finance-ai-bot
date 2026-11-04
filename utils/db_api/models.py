@@ -42,6 +42,10 @@ class Account(Base):
     credit_limit_minor: Mapped[int] = mapped_column(BigInteger, default=0)
     is_active: Mapped[bool] = mapped_column(default=True)  # False = deactivated (soft-deleted)
     created_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    # Mini App: cash | uzcard | humo | visa | mastercard (None for accounts added in the chat)
+    card_type: Mapped[Optional[str]] = mapped_column(String(16))
+    # Last 4 digits of the card number (never the full number); matched against "*1234" in bank SMS
+    last4: Mapped[Optional[str]] = mapped_column(String(4))
 
 
 class Category(Base):

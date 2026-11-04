@@ -185,6 +185,8 @@ TEXTS = {
     },
     "btn_split_finish": {"uz": "Yo'q, yakunlash", "ru": "Нет, завершить", "en": "No, finish"},
     "btn_add_account": {"uz": "➕ Hisob qo'shish", "ru": "➕ Добавить счёт", "en": "➕ Add account"},
+    "btn_miniapp": {"uz": "💳 Kartalarim (Mini App)", "ru": "💳 Мои карты (Mini App)", "en": "💳 My cards (Mini App)"},
+    "menu_miniapp": {"uz": "Kartalarim", "ru": "Мои карты", "en": "My cards"},
     "btn_rename": {"uz": "✏️ Nomini o'zgartirish", "ru": "✏️ Переименовать", "en": "✏️ Rename"},
     "btn_edit_opening": {
         "uz": "Boshlang'ich qoldiq", "ru": "Начальный остаток", "en": "Opening balance",
@@ -890,3 +892,93 @@ TEXTS = {
         "en": "To add an expense, write: “taxi 25\u202f000”",
     },
 }
+
+
+# ---- Mini App (webapp/): plain text, rendered with textContent; "{name}"-style placeholders are filled in JS ----
+WEBAPP_TEXTS = {
+    "title_main": {"uz": "KARTALARIM", "ru": "МОИ КАРТЫ", "en": "MY CARDS"},
+    "total_balance": {"uz": "JAMI BALANS", "ru": "ОБЩИЙ БАЛАНС", "en": "TOTAL BALANCE"},
+    "accounts_count": {"uz": "{n} ta hisob", "ru": "счетов: {n}", "en": "accounts: {n}"},
+    "section_accounts": {"uz": "HISOBLAR", "ru": "СЧЕТА", "en": "ACCOUNTS"},
+    "col_balance": {"uz": "balans", "ru": "баланс", "en": "balance"},
+    "add_card": {"uz": "KARTA QO'SHISH", "ru": "ДОБАВИТЬ КАРТУ", "en": "ADD CARD"},
+    "no_accounts": {"uz": "Hali hisob yo'q", "ru": "Счетов пока нет", "en": "No accounts yet"},
+    "limit_line": {"uz": "limit {amount}", "ru": "лимит {amount}", "en": "limit {amount}"},
+    "sum": {"uz": "so'm", "ru": "сум", "en": "UZS"},
+    "tag_cash": {"uz": "NAQD", "ru": "НАЛ", "en": "CASH"},
+    "tag_credit": {"uz": "KREDIT", "ru": "КРЕДИТ", "en": "CREDIT"},
+    "tag_card": {"uz": "KARTA", "ru": "КАРТА", "en": "CARD"},
+    "title_new": {"uz": "YANGI KARTA", "ru": "НОВАЯ КАРТА", "en": "NEW CARD"},
+    "title_edit": {"uz": "TAHRIRLASH", "ru": "ИЗМЕНИТЬ КАРТУ", "en": "EDIT CARD"},
+    "lbl_type": {"uz": "TURI", "ru": "ТИП", "en": "TYPE"},
+    "lbl_name": {"uz": "NOMI / BANK", "ru": "НАЗВАНИЕ / БАНК", "en": "NAME / BANK"},
+    "lbl_last4": {"uz": "OXIRGI 4 RAQAM", "ru": "ПОСЛЕДНИЕ 4 ЦИФРЫ", "en": "LAST 4 DIGITS"},
+    "lbl_currency": {"uz": "VALYUTA", "ru": "ВАЛЮТА", "en": "CURRENCY"},
+    "lbl_balance": {"uz": "HOZIRGI BALANS", "ru": "ТЕКУЩИЙ БАЛАНС", "en": "CURRENT BALANCE"},
+    "lbl_debt": {"uz": "HOZIRGI QARZ", "ru": "ТЕКУЩИЙ ДОЛГ", "en": "CURRENT DEBT"},
+    "lbl_limit": {"uz": "KREDIT LIMITI", "ru": "КРЕДИТНЫЙ ЛИМИТ", "en": "CREDIT LIMIT"},
+    "credit_title": {"uz": "Kredit karta", "ru": "Кредитная карта", "en": "Credit card"},
+    "credit_hint": {
+        "uz": "Limit va qarz alohida ko'rsatiladi", "ru": "Лимит и долг показываются отдельно",
+        "en": "Limit and debt are shown separately",
+    },
+    "note_last4": {
+        "uz": "Karta raqamining faqat oxirgi 4 ta raqami saqlanadi: bot SMS'dagi *{last4} orqali kartani o'zi taniydi.",
+        "ru": "Хранятся только последние 4 цифры номера карты: бот сам узнает карту по *{last4} в SMS.",
+        "en": "Only the last 4 digits of the card number are stored: the bot recognizes the card by *{last4} "
+              "in a bank SMS.",
+    },
+    "save": {"uz": "SAQLASH", "ru": "СОХРАНИТЬ", "en": "SAVE"},
+    "back": {"uz": "Orqaga", "ru": "Назад", "en": "Back"},
+    "balance": {"uz": "BALANS", "ru": "БАЛАНС", "en": "BALANCE"},
+    "debt": {"uz": "QARZ", "ru": "ДОЛГ", "en": "DEBT"},
+    "available": {"uz": "mavjud {amount}", "ru": "доступно {amount}", "en": "available {amount}"},
+    "month_expense": {"uz": "BU OY CHIQIM", "ru": "РАСХОД ЗА МЕСЯЦ", "en": "SPENT THIS MONTH"},
+    "month_income": {"uz": "BU OY KIRIM", "ru": "ДОХОД ЗА МЕСЯЦ", "en": "INCOME THIS MONTH"},
+    "recent_ops": {"uz": "OXIRGI AMALLAR", "ru": "ПОСЛЕДНИЕ ОПЕРАЦИИ", "en": "RECENT OPERATIONS"},
+    "no_ops": {"uz": "Hali amallar yo'q", "ru": "Операций пока нет", "en": "No operations yet"},
+    "op_income": {"uz": "Kirim", "ru": "Доход", "en": "Income"},
+    "op_transfer": {"uz": "O'tkazma", "ru": "Перевод", "en": "Transfer"},
+    "op_expense": {"uz": "Xarajat", "ru": "Расход", "en": "Expense"},
+    "edit": {"uz": "TAHRIRLASH", "ru": "ИЗМЕНИТЬ", "en": "EDIT"},
+    "delete": {"uz": "Kartani o'chirish", "ru": "Удалить карту", "en": "Delete card"},
+    "confirm_delete": {
+        "uz": "«{name}» o'chirilsinmi?", "ru": "Удалить «{name}»?", "en": "Delete “{name}”?",
+    },
+    "confirm_archive": {
+        "uz": "«{name}» hisobida amallar bor: u arxivlanadi (ro'yxatdan yashiriladi, tarix saqlanadi). Davom etilsinmi?",
+        "ru": "У «{name}» есть операции: счёт будет архивирован (скрыт из списка, история сохранится). Продолжить?",
+        "en": "“{name}” has operations: it will be archived (hidden from the list, history kept). Continue?",
+    },
+    "deleted": {"uz": "Karta o'chirildi", "ru": "Карта удалена", "en": "Card deleted"},
+    "archived": {"uz": "Karta arxivlandi", "ru": "Карта архивирована", "en": "Card archived"},
+    "saved": {"uz": "Saqlandi", "ru": "Сохранено", "en": "Saved"},
+    "loading": {"uz": "Yuklanmoqda…", "ru": "Загрузка…", "en": "Loading…"},
+    "err_name": {"uz": "Nomini yozing (40 belgigacha)", "ru": "Введите название (до 40 символов)",
+                 "en": "Enter a name (up to 40 characters)"},
+    "err_last4": {"uz": "Kartaning oxirgi 4 raqamini yozing", "ru": "Введите последние 4 цифры карты",
+                  "en": "Enter the last 4 digits of the card"},
+    "err_last4_taken": {"uz": "Bu 4 raqamli boshqa karta bor", "ru": "Карта с этими 4 цифрами уже есть",
+                        "en": "Another card already has these 4 digits"},
+    "err_amount": {"uz": "Summa noto'g'ri", "ru": "Неверная сумма", "en": "Invalid amount"},
+    "err_currency_locked": {
+        "uz": "Amallari bor hisobning valyutasini o'zgartirib bo'lmaydi",
+        "ru": "Нельзя сменить валюту счёта, у которого есть операции",
+        "en": "The currency of an account with operations cannot change",
+    },
+    "err_not_found": {"uz": "Hisob topilmadi", "ru": "Счёт не найден", "en": "Account not found"},
+    "err_auth": {
+        "uz": "Ilovani bot ichidagi tugma orqali oching", "ru": "Откройте приложение кнопкой в боте",
+        "en": "Open the app from the button in the bot",
+    },
+    "err_forbidden": {"uz": "Bu shaxsiy bot. Kirish yopiq.", "ru": "Это личный бот. Доступ закрыт.",
+                      "en": "This is a private bot. Access is restricted."},
+    "err_generic": {"uz": "Xatolik. Qayta urinib ko'ring", "ru": "Ошибка. Попробуйте ещё раз",
+                    "en": "Something went wrong. Try again"},
+}
+
+
+def webapp_texts(lang: Optional[str]) -> dict:
+    """All Mini App texts in one language (missing ones fall back to English)."""
+    lang = lang if lang in LANGUAGES else DEFAULT_LANGUAGE
+    return {key: variants.get(lang) or variants["en"] for key, variants in WEBAPP_TEXTS.items()}

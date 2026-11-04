@@ -1,0 +1,130 @@
+/* Finance bot Mini App: a "receipt" look. JetBrains Mono is served by the bot (assets/fonts, SIL OFL). */
+@font-face { font-family: "JetBrains Mono"; font-weight: 400; font-display: swap; src: url("../fonts/JetBrainsMono-Regular.woff2") format("woff2"); }
+@font-face { font-family: "JetBrains Mono"; font-weight: 500; font-display: swap; src: url("../fonts/JetBrainsMono-Medium.woff2") format("woff2"); }
+@font-face { font-family: "JetBrains Mono"; font-weight: 700; font-display: swap; src: url("../fonts/JetBrainsMono-Bold.woff2") format("woff2"); }
+@font-face { font-family: "JetBrains Mono"; font-weight: 800; font-display: swap; src: url("../fonts/JetBrainsMono-ExtraBold.woff2") format("woff2"); }
+
+:root {
+  --bg: #22302E;
+  --bg-stripe: #273734;
+  --paper: #FBFAF4;
+  --ink: #1B1B1B;
+  --mute: #57544D;
+  --soft: #C9D3CF;
+  --red: #C8312B;
+  --debt: #B42318;
+  --blue: #1F55C2;
+  --dots: #A29E93;
+  --danger-link: #FFB4AE;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; min-height: 100%; background: var(--bg); }
+body {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  color: var(--paper);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+button, input { font-family: inherit; }
+a { color: var(--paper); }
+
+.app {
+  min-height: var(--tg-viewport-stable-height, 100vh);
+  max-width: 480px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+html { background: repeating-linear-gradient(135deg, var(--bg) 0px, var(--bg) 14px, var(--bg-stripe) 14px, var(--bg-stripe) 28px) fixed; }
+body { background: transparent; }
+
+/* ---- Paper slips ---- */
+.slip { position: relative; color-scheme: light; background: var(--paper); color: var(--ink); box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35); }
+.perf { position: absolute; left: 0; right: 0; height: 12px; background: radial-gradient(circle at 6px 6px, var(--bg) 5px, transparent 5.5px) 0 0 / 12px 12px repeat-x; }
+.perf.t { top: -6px; }
+.perf.b { bottom: -6px; }
+.dash { border-top: 2px dashed var(--ink); }
+.mute { color: var(--mute); }
+.red { color: var(--debt); }
+.blue { color: var(--blue); }
+
+/* ---- Headers ---- */
+.hero { padding: 20px 20px 14px; display: flex; flex-direction: column; gap: 4px; }
+.brand { font-size: 13px; font-weight: 700; letter-spacing: 3px; color: var(--soft); }
+.h1 { font-size: 26px; font-weight: 800; letter-spacing: 1px; }
+.bar { padding: 14px 12px 12px; display: flex; align-items: center; gap: 6px; }
+.bar .title { flex: 1; min-width: 0; font-size: 20px; font-weight: 800; letter-spacing: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-transform: uppercase; }
+.icon-btn { width: 44px; height: 44px; flex: none; display: flex; align-items: center; justify-content: center; background: none; border: 0; padding: 0; color: var(--paper); cursor: pointer; }
+.section { padding: 22px 20px 10px; display: flex; justify-content: space-between; align-items: baseline; }
+.section .name { font-size: 13px; font-weight: 700; letter-spacing: 2px; color: var(--soft); }
+.section .hint { font-size: 12px; font-weight: 500; color: var(--soft); }
+
+/* ---- Totals / stamp slip ---- */
+.total { margin: 0 16px; padding: 18px 18px 22px; display: flex; flex-direction: column; gap: 6px; }
+.lbl-sm { font-size: 12px; font-weight: 700; letter-spacing: 2px; }
+.big { font-size: 30px; font-weight: 800; letter-spacing: -0.5px; overflow-wrap: anywhere; }
+.sub { font-size: 13px; font-weight: 500; }
+
+/* ---- Account rows ---- */
+.list { margin: 0 16px; display: flex; flex-direction: column; }
+.row { display: flex; align-items: center; gap: 12px; padding: 14px 16px; text-decoration: none; color: var(--ink); background: none; border: 0; width: 100%; text-align: left; cursor: pointer; }
+.row .main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.row .nm { font-size: 15px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .meta { font-size: 12px; overflow-wrap: anywhere; }
+.row .amt { font-size: 15px; font-weight: 700; white-space: nowrap; }
+.row + .dash { margin: 0 16px; }
+.empty { padding: 22px 16px; font-size: 14px; text-align: center; }
+.tag { flex: none; font-size: 11px; font-weight: 800; letter-spacing: 1.5px; border: 2px solid currentColor; border-radius: 6px; padding: 2px 6px; }
+
+/* ---- Buttons ---- */
+.spacer { flex: 1; min-height: 16px; }
+.actions { padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.btn { height: 52px; border-radius: 12px; border: 0; width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 15px; font-weight: 800; letter-spacing: 1.5px; text-decoration: none; cursor: pointer; }
+.btn.primary { background: var(--red); color: #FFFFFF; }
+.btn.paper { background: var(--paper); color: var(--ink); }
+.btn:disabled { opacity: 0.6; cursor: default; }
+.link-danger { height: 44px; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; letter-spacing: 1px; color: var(--danger-link); background: none; border: 0; cursor: pointer; }
+
+/* ---- Form ---- */
+.form { margin: 6px 16px 0; padding: 22px 18px 26px; display: flex; flex-direction: column; gap: 20px; }
+.fld { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.lbl { font-size: 11px; font-weight: 700; letter-spacing: 2px; color: var(--mute); }
+.inp { height: 44px; border: 0; border-bottom: 2px dashed var(--ink); border-radius: 0; background: transparent; font-size: 16px; font-weight: 700; color: var(--ink); padding: 0; width: 100%; outline: none; }
+.inp::placeholder { color: var(--dots); font-weight: 500; }
+.inp:focus { border-bottom-style: solid; }
+.inp.bad { border-bottom-color: var(--red); }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { height: 36px; border-radius: 8px; border: 2px solid var(--ink); background: transparent; font-size: 12px; font-weight: 800; letter-spacing: 1px; padding: 0 10px; color: var(--ink); cursor: pointer; }
+.chip.on { background: var(--ink); color: var(--paper); }
+.chip:disabled { opacity: 0.35; cursor: default; }
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.check { display: flex; align-items: center; gap: 12px; min-height: 44px; cursor: pointer; }
+.check input { width: 22px; height: 22px; accent-color: var(--red); margin: 0; flex: none; }
+.check .t1 { font-size: 14px; font-weight: 800; }
+.check .t2 { font-size: 12px; color: var(--mute); }
+.note { padding: 18px 20px 0; font-size: 12px; line-height: 1.5; color: var(--soft); }
+
+/* ---- Card details ---- */
+.stamp-slip { margin: 6px 16px 0; padding: 22px 18px 24px; display: flex; flex-direction: column; gap: 6px; }
+.stamp-slip .big { margin-top: 14px; padding-right: 4px; }
+.stamp { position: absolute; top: 18px; right: 16px; transform: rotate(-10deg); border: 3px solid currentColor; border-radius: 8px; padding: 3px; }
+.stamp > div { border: 1.5px solid currentColor; border-radius: 5px; padding: 3px 8px; font-size: 13px; font-weight: 800; letter-spacing: 2px; }
+.month { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.month > div { display: flex; flex-direction: column; gap: 2px; }
+.month .k { font-size: 11px; font-weight: 700; letter-spacing: 1.5px; }
+.month .v { font-size: 16px; font-weight: 800; }
+.ops { margin: 0 16px; padding: 16px 16px 18px; display: flex; flex-direction: column; gap: 12px; }
+.op { display: flex; align-items: baseline; gap: 8px; font-size: 14px; }
+.op .d { width: 46px; flex: none; }
+.op .c { font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 0 1 auto; }
+.op .ld { flex: 1 0 12px; border-bottom: 2px dotted var(--dots); }
+.op .a { font-weight: 700; white-space: nowrap; }
+
+/* ---- States ---- */
+.center { flex: 1; display: flex; align-items: center; justify-content: center; padding: 32px; text-align: center; font-size: 14px; color: var(--soft); line-height: 1.5; }
+.toast { position: fixed; left: 16px; right: 16px; bottom: calc(84px + env(safe-area-inset-bottom)); max-width: 448px; margin: 0 auto; background: var(--ink); color: var(--paper); border: 2px solid var(--paper); border-radius: 10px; padding: 12px 14px; font-size: 13px; font-weight: 700; text-align: center; z-index: 10; box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35); }
+.toast.err { border-color: var(--red); }

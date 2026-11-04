@@ -181,7 +181,8 @@ free text (input_type "text"); spoken numbers ("yigirma besh ming", "двадц�
 "Зачисление"/"Kirim"/"Tushum" = income. The balance ("Balans"/"Остаток") is NOT the amount. Card digits \
 like "*1234" or "8600 **** **** 1234" give card_last4.
 - Choose account_id, category and subcategory ONLY from the lists provided by the user context, using the \
-exact names/ids. Match accounts by name, bank, card last 4 digits in the account name, or words like \
+exact names/ids. Match accounts by name, bank, card last 4 digits (the account's last4, or digits \
+in its name), or words like \
 "naqd"/"наличные"/"cash" for a cash account. If unsure, use null - the user will choose.
 - occurred_at only if a date/time is written in the input; otherwise null.
 - If the input contains no financial operation or is unreadable, return an empty operations list.
@@ -198,15 +199,16 @@ Return an empty operations list for a question.
 def build_context(accounts: Sequence[dict], categories: dict, now_text: str, conversation: bool = False) -> str:
     """Plain-text description of the user's data for the prompt.
 
-    accounts: [{id, name, kind, currency}]; categories: {"expense": {name: [subs]}, "income": {name: []}}.
+    accounts: [{id, name, kind, currency, last4}]; categories: {"expense": {name: [subs]}, "income": {name: []}}.
     conversation: the user has just been asking the assistant questions, so short follow-ups are questions.
     """
     lines = [f"Current local date and time (Asia/Tashkent): {now_text}"]
     if conversation:
         lines.append("The user is in a conversation with the finance assistant: a short follow-up without an "
                      "amount (e.g. 'and last month?', 'a taksi?') has intent=question.")
-    lines += ["", "User's accounts (id | name | kind | currency):"]
-    lines += [f"{a['id']} | {a['name']} | {a['kind']} | {a['currency']}" for a in accounts] or ["(none)"]
+    lines += ["", "User's accounts (id | name | kind | currency | card last4):"]
+    lines += [f"{a['id']} | {a['name']} | {a['kind']} | {a['currency']} | {a.get('last4') or '-'}"
+              for a in accounts] or ["(none)"]
     lines += ["", "Expense categories (category: subcategories):"]
     lines += [f"- {name}: {', '.join(subs)}" for name, subs in categories.get("expense", {}).items()] or ["(none)"]
     lines += ["", "Income categories:"]

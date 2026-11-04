@@ -7,11 +7,18 @@ env.read_env()
 # Read the following from the .env file
 BOT_TOKEN = env.str("BOT_TOKEN")  # Bot token
 ADMINS = env.list("ADMINS")  # List of admins
+ADMIN_IDS = frozenset(int(admin) for admin in ADMINS if str(admin).strip().isdigit())  # who may use the bot
 IP = env.str("ip", default="")  # Hosting IP address (unused with long polling; optional)
 
 # --- Finora features ---
 DATABASE_URL = env.str("DATABASE_URL", default="sqlite+aiosqlite:///./finora.db")  # SQLAlchemy async DB URL
-WEBAPP_URL = env.str("WEBAPP_URL", default="http://localhost:8000")  # Mini App backend base URL
+# Mini App: public HTTPS address of the web server below (e.g. https://<app>.up.railway.app).
+# Empty = the server still runs, but the bot shows no Mini App buttons (Telegram only opens https:// Mini Apps).
+WEBAPP_URL = env.str("WEBAPP_URL", default="").strip()
+WEBAPP_HOST = env.str("WEBAPP_HOST", default="0.0.0.0")  # interface the Mini App web server listens on
+PORT = env.int("PORT", default=8080)  # Mini App web server port (Railway sets PORT)
+# Mini App buttons are shown only for an https:// URL: Telegram rejects any other web_app button
+WEBAPP_ENABLED = WEBAPP_URL.lower().startswith("https://")
 
 # --- AI provider: "gemini" (Google Gemini, default; also reads voice messages) or "claude" (Anthropic) ---
 AI_PROVIDER = env.str("AI_PROVIDER", default="gemini").strip().lower()

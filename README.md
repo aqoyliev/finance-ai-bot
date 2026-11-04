@@ -39,6 +39,8 @@ A private personal-finance bot for a single owner, built on this template.
 - 🧾 Every saved operation is confirmed with a short card (see below)
 - 💳 Accounts (cash, debit, credit; UZS or USD): add, rename, change the opening balance or credit limit,
   deactivate (soft delete, history is kept). Credit cards show debt, limit and available credit
+- 📱 A Telegram Mini App for the cards (see Mini App below): balances, add / edit / delete, the month's totals and the
+  last operations of a card
 - 🔁 Transfers between own accounts of the same currency; a transfer to a credit card repays its debt.
   Transfers are never counted as income or expense
 - ⚠️ Warning when an expense pushes a credit card's debt above its limit
@@ -195,8 +197,9 @@ schema (Gemini: `response_json_schema` with JSON mode, low thinking level; Claud
 `output_config.format`).
 `utils/ai/parser.py` never trusts the answer: amounts are re-parsed (`125 000,00`, `125.000`, `18 ming`, `12m`),
 the currency must be UZS/USD, the account must be yours and in that currency, the category must exist;
-anything doubtful is left empty (then the account is asked, the category falls back to "Other"). Card digits from an SMS (`*1234`) match an account whose
-**name contains those 4 digits**, e.g. rename the account to `UOB 1234`.
+anything doubtful is left empty (then the account is asked, the category falls back to "Other"). Card digits from an SMS (`*1234`) match the account
+whose **last 4 digits** were saved in the Mini App; an account without saved digits still matches when its
+**name contains those 4 digits** (e.g. `UOB 1234`; migration `0005` copied such digits into the new field).
 
 While you are inside a manual step (e.g. typing an amount after `/expense`), text goes to that step, not to the
 AI. The reply-keyboard buttons are handled before everything else (`handlers/users/menu.py` is registered right
@@ -241,6 +244,44 @@ summaries, not raw rows.
 > **Privacy:** your questions, the data the assistant looks up to answer them (totals, categories,
 > matching operations, balances) and the summaries used for advice are sent to the selected AI provider.
 
+### Mini App (cards)
+
+A Telegram Mini App for managing accounts, served by the bot process itself: `on_startup` starts an aiohttp web
+server on `PORT` (default `8080`, all interfaces) next to long polling and stops it on shutdown. The page is plain
+HTML + CSS + JS in `webapp/` (no build step), drawn as paper receipts in JetBrains Mono (served from `assets/fonts/`,
+no Google Fonts); the server code is in `utils/miniapp/`.
+
+- **💳 Kartalarim:** total balance in UZS (plus USD when there are USD accounts), the number of accounts, every account
+  with a type tag (NAQD / UZCARD / HUMO / VISA / MASTERCARD, KREDIT for credit cards), name, `•••• 1234` and
+  balance; credit cards show the debt in red and the limit. "Karta qo'shish" opens the form.
+- **Yangi karta / Tahrirlash:** type, name / bank, last 4 digits (exactly 4; optional for cash), currency, current
+  balance and a "Kredit karta" box that turns the balance into the current debt and shows the credit limit. Only the
+  last 4 digits are stored, never the card number; two active accounts cannot share them. The current balance works
+  like the opening balance in the chat: editing it moves the opening balance by the difference, so history stays
+  consistent. The currency of an account with operations cannot change.
+- **Karta tafsiloti:** a stamp with the type, the balance (or debt), last 4 and currency, the expense and income of
+  the current financial month (from the salary day) and the last 10 operations. Delete asks for confirmation: an
+  account without operations is deleted, one with operations is archived (hidden, history kept), like
+  "deactivate" in the chat.
+- Texts are in uz / ru / en (`WEBAPP_TEXTS` in `utils/i18n.py`), in the language chosen in the bot. The Telegram Back
+  button and the in-page buttons both work.
+
+**Opening it.** With `WEBAPP_URL` set to the public `https://` address of the server, ⚙️ Settings → 💳 Accounts gets a
+"💳 Kartalarim (Mini App)" button and each admin's chat menu button opens the Mini App (set at start-up; reset to the
+default when `WEBAPP_URL` is empty). Without `WEBAPP_URL`, or with a non-https one, the server still runs but the bot
+shows no Mini App buttons (Telegram only opens https Mini Apps). The "➕ Add a new card" button of the AI account
+question still uses the chat flow.
+
+**Security.** Every `/api/` request carries `Telegram.WebApp.initData` in the `X-Telegram-Init-Data` header. The server
+checks its HMAC-SHA256 signature with the bot token (secret = `HMAC_SHA256("WebAppData", BOT_TOKEN)`), refuses data
+older than 24 hours and takes the user id from it; only IDs in `ADMINS` get through (401 for missing / bad /
+expired data, 403 for anyone else). initData and the token are never logged.
+
+API (amounts are integers in minor units): `GET /api/me` (language and texts), `GET /api/accounts`,
+`POST /api/accounts`, `GET /api/accounts/{id}` (with month totals and recent operations),
+`PUT /api/accounts/{id}`, `DELETE /api/accounts/{id}` (`deleted` or `archived`). `GET /` serves the page,
+`GET /healthz` answers `ok`.
+
 ### Environment variables (`.env`)
 
 | Variable       | Description                                                              |
@@ -261,13 +302,15 @@ summaries, not raw rows.
 | `CLAUDE_TIMEOUT` | Seconds to wait for the extraction model, default `60`                   |
 | `CLAUDE_ANALYSIS_TIMEOUT` | Seconds per Ask AI / advice request, default `180`              |
 | `CLAUDE_REFUSAL_FALLBACK` | Retry a policy-declined Ask AI / advice request on Anthropic's recommended fallback model (server-side, beta), default `true` |
+| `WEBAPP_URL` | Public `https://` address of the Mini App web server, e.g. `https://finance-ai-bot-production.up.railway.app`; empty (default) = no Mini App buttons |
+| `PORT` | Port of the Mini App web server, default `8080` (Railway sets it) |
 
 `.env` is gitignored, so your secrets are never committed. Copy `.env.example` to start.
 
 ### Deploy to Railway
 
-The bot uses long polling (no HTTP port, no webhook), so it runs on Railway as a worker service built
-from the `Dockerfile` (Playwright base image with Chromium for the report cards). `railway.json` sets
+The bot uses long polling (no webhook) and serves the Mini App over HTTP on `PORT` from the same process. It
+runs on Railway as one service built from the `Dockerfile` (Python 3.11 with Chromium for the report cards). `railway.json` sets
 the Dockerfile builder, restart on failure and exactly 1 replica.
 
 > **Only one instance may poll a bot token.** Stop your local bot (and any other deployment using the
@@ -294,13 +337,16 @@ the Dockerfile builder, restart on failure and exactly 1 replica.
    | `CLAUDE_ANALYSIS_MODEL` | Model for Ask AI and advice (default `claude-opus-5-5`) |
    | `CLAUDE_TIMEOUT` / `CLAUDE_ANALYSIS_TIMEOUT` | Request timeouts in seconds (defaults `60` / `180`) |
    | `CLAUDE_REFUSAL_FALLBACK` | Retry policy-declined analysis requests on a fallback model (default `true`) |
-   | `WEBAPP_URL` | Mini App backend base URL (only needed if you use the Mini App) |
+   | `WEBAPP_URL` | The service's public `https://` domain (Settings -> Networking -> Generate Domain), e.g. `https://finance-ai-bot-production.up.railway.app`; enables the Mini App buttons |
+   | `PORT` | Set by Railway; the Mini App web server listens on it (default `8080`) |
 
 4. **Deploy**, then open **Deployments -> View logs**. A healthy start shows the Alembic migration lines
    and then aiogram polling; admins also get the "bot started" message in Telegram.
 5. Every push to the connected branch redeploys automatically. Migrations run on start-up.
 
-There is no healthcheck path because the bot serves no HTTP.
+`GET /healthz` answers `ok` and can be used as the healthcheck path. In @BotFather you may also register the same
+URL as the bot's Mini App (Bot Settings -> Configure Mini App), but it is not required: the bot sets the menu button
+itself.
 
 Postgres would be an alternative to SQLite + Volume (add the Railway Postgres plugin and set
 `DATABASE_URL=postgresql+asyncpg://...`, plus the `asyncpg` dependency). It is not implemented here.
@@ -359,12 +405,14 @@ The Claude and Gemini SDKs are mocked, so no API key is needed and no requests a
 ├── states/                # FSM states
 ├── filters/               # custom filters
 ├── migrations/            # alembic migrations
+├── webapp/                # Mini App page: index.html, app.css, app.js (no build step)
 ├── tests/                 # pytest suite (service layer, reports / alerts / charts, AI parsing with mocked Claude / Gemini clients)
 └── utils/
     ├── ai/                # provider switch + extraction (core.py), clients (gemini.py, claude.py), validation (parser.py), Ask AI + advice (assistant.py, tools.py)
     ├── advice_scheduler.py # weekly / monthly advice (asyncio task)
     ├── charts.py          # matplotlib expense chart (PNG bytes)
     ├── db_api/            # database helpers (reports, budgets, alerts, operations, ...)
+    ├── miniapp/           # Mini App web server (aiohttp), JSON API, initData validation
     ├── misc/              # logging, throttling decorator
     ├── notify_admins.py   # start-up notification
     ├── notify_alerts.py   # sends limit alerts after operations are saved / edited

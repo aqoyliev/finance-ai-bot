@@ -3,11 +3,13 @@ import logging
 
 from aiogram import executor
 
+from data import config
 from loader import dp
 import middlewares, filters, handlers
 from utils import cards
 from utils.advice_scheduler import scheduler
 from utils.db_api.base import init_db
+from utils.miniapp import server as miniapp
 from utils.notify_admins import on_startup_notify
 from utils.set_bot_commands import set_default_commands
 
@@ -31,9 +33,14 @@ async def on_startup(dispatcher):
     # Weekly / monthly AI advice (also sends advice missed today while the bot was down)
     scheduler.start()
 
+    # Mini App: web server on PORT (always) and the chat menu button of every admin (when WEBAPP_URL is set)
+    await miniapp.start(config.BOT_TOKEN, config.ADMIN_IDS, config.WEBAPP_HOST, config.PORT)
+    await miniapp.set_menu_buttons(dispatcher.bot, config.ADMIN_IDS)
+
 
 async def on_shutdown(dispatcher):
     await scheduler.stop()
+    await miniapp.stop()
     # The headless Chromium of the report cards (started on the first card)
     await cards.close_renderer()
 

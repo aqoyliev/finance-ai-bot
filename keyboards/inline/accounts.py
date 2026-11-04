@@ -1,7 +1,8 @@
 from typing import Iterable
 
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 
+from data import config
 from utils.db_api.common import ACCOUNT_KINDS
 from utils.i18n import t
 
@@ -9,8 +10,11 @@ from .finance import back_button, cancel_button
 
 
 def account_list(accounts: Iterable, lang: str) -> InlineKeyboardMarkup:
-    rows = [[InlineKeyboardButton(f"{a.name} ({a.currency})", callback_data=f"acs:view:{a.id}")]
-            for a in accounts]
+    rows = []
+    if config.WEBAPP_ENABLED:
+        rows.append([InlineKeyboardButton(t("btn_miniapp", lang), web_app=WebAppInfo(url=config.WEBAPP_URL))])
+    rows += [[InlineKeyboardButton(f"{a.name} ({a.currency})", callback_data=f"acs:view:{a.id}")]
+             for a in accounts]
     rows.append([InlineKeyboardButton(t("btn_add_account", lang), callback_data="acs:add")])
     rows.append([back_button(lang, "menu:settings")])
     return InlineKeyboardMarkup(inline_keyboard=rows)

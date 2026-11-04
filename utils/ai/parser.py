@@ -28,6 +28,7 @@ class AccountRef:
     name: str
     kind: str
     currency: str
+    last4: Optional[str] = None  # card digits saved in the Mini App
 
 
 @dataclass
@@ -68,7 +69,8 @@ class Draft:
 
 
 async def load_context(user_id: int) -> UserContext:
-    accounts = [AccountRef(a.id, a.name, a.kind, a.currency) for a in await db.list_accounts(user_id)]
+    accounts = [AccountRef(a.id, a.name, a.kind, a.currency, a.last4)
+                for a in await db.list_accounts(user_id)]
     categories: Dict[str, Dict[str, List[str]]] = {"expense": {}, "income": {}}
     for kind in categories:
         for category in await db.list_categories(user_id, kind):
@@ -159,7 +161,8 @@ def _last4(value: Any) -> Optional[str]:
 
 def match_account(ctx: UserContext, account_id: Any = None, card_last4: Any = None,
                   hint: Any = None) -> Optional[AccountRef]:
-    """The user's account by id (validated), by card last 4 digits in its name, or by a name hint."""
+    """The user's account by id (validated), by card last 4 digits (the saved last4, else 4 digits in its
+    name), or by a name hint."""
     if isinstance(account_id, str) and account_id.strip().isdigit():
         account_id = int(account_id)
     if isinstance(account_id, (int, float)) and not isinstance(account_id, bool):
@@ -168,7 +171,9 @@ def match_account(ctx: UserContext, account_id: Any = None, card_last4: Any = No
             return account
     last4 = _last4(card_last4)
     if last4:
-        by_card = [a for a in ctx.accounts if last4 in re.findall(r"\d{4}", a.name)]
+        by_card = [a for a in ctx.accounts if a.last4 == last4]
+        if not by_card:  # accounts without saved digits, named like "UOB 4417"
+            by_card = [a for a in ctx.accounts if not a.last4 and last4 in re.findall(r"\d{4}", a.name)]
         if len(by_card) == 1:
             return by_card[0]
     name = _match_name(hint, [a.name for a in ctx.accounts])
