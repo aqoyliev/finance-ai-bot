@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 from aiogram import executor
@@ -38,4 +39,6 @@ async def on_shutdown(dispatcher):
 
 
 if __name__ == '__main__':
+    # Newer uvloop (used by aiogram 2 in Docker) no longer creates a loop implicitly, so set one explicitly
+    asyncio.set_event_loop(asyncio.new_event_loop())
     executor.start_polling(dp, on_startup=on_startup, on_shutdown=on_shutdown)
