@@ -1,6 +1,6 @@
-# Playwright's official image ships Chromium and all its system libraries.
-# Keep the tag in sync with the playwright version in requirements.txt (~=1.64).
-FROM mcr.microsoft.com/playwright/python:v1.64.1-noble
+# Plain Python 3.11 image (aiogram 2.x pins aiohttp<3.9, which has no wheels for Python 3.12+).
+# Chromium and its system libraries are installed below via `playwright install --with-deps`.
+FROM python:3.11-slim-bookworm
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -12,6 +12,11 @@ WORKDIR /app
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Needs apt and root: installs Chromium plus the system libraries it depends on.
+# The apt lists are removed in the same layer to keep the image small.
+RUN python -m playwright install --with-deps chromium \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY . .
 
