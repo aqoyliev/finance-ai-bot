@@ -337,6 +337,8 @@ TEXTS = {
     },
     "rate_source_cbu": {"uz": "Markaziy bank, {date}", "ru": "Центральный банк, {date}",
                         "en": "Central Bank, {date}"},
+    "rate_source_market": {"uz": "xalqaro bozor kursi, {date}", "ru": "международный рыночный курс, {date}",
+                           "en": "international market rate, {date}"},
     "rate_source_manual": {"uz": "qo'lda", "ru": "вручную", "en": "manual"},
     "rate_current": {
         "uz": "Dollar kursi: 1 USD = {rate} UZS ({source})\n\n/rate 1 USD 12850 UZS — o'zingiznikini belgilash\n"
@@ -347,11 +349,11 @@ TEXTS = {
               "/rate auto — back to the Central Bank rate",
     },
     "rate_unknown": {
-        "uz": "Markaziy bank kursini hozircha olib bo'lmadi. Keyinroq urinib ko'ring yoki o'zingiznikini "
+        "uz": "Dollar kursini hozircha olib bo'lmadi. Keyinroq urinib ko'ring yoki o'zingiznikini "
               "belgilang: /rate 1 USD 12850 UZS",
-        "ru": "Курс Центробанка пока получить не удалось. Попробуйте позже или задайте свой: "
+        "ru": "Курс доллара пока получить не удалось. Попробуйте позже или задайте свой: "
               "/rate 1 USD 12850 UZS",
-        "en": "The Central Bank rate could not be fetched yet. Try later or set your own: "
+        "en": "The USD rate could not be fetched yet. Try later or set your own: "
               "/rate 1 USD 12850 UZS",
     },
     "rate_auto": {

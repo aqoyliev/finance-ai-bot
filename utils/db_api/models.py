@@ -99,12 +99,13 @@ class ExchangeRate(Base):
 
 
 class OfficialRate(Base):
-    """Last good official (Central Bank of Uzbekistan) rate, one row per currency (USD -> UZS); see utils/rates.py."""
+    """Last good default rate (Central Bank of Uzbekistan, else an international market source), one row per currency (USD -> UZS); see utils/rates.py."""
     __tablename__ = "official_rates"
 
     currency: Mapped[str] = mapped_column(String(3), primary_key=True)
     rate: Mapped[str] = mapped_column(String)  # UZS per 1 unit, Decimal as string
-    rate_date: Mapped[date] = mapped_column(Date)  # the date the Central Bank set the rate for
+    rate_date: Mapped[date] = mapped_column(Date)  # the source's date for the rate (else today in Asia/Tashkent)
+    source: Mapped[str] = mapped_column(String, default="cbu", server_default="cbu")  # cbu | market
     fetched_at: Mapped[datetime] = mapped_column(DateTime)  # naive UTC
 
 

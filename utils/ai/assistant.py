@@ -111,6 +111,9 @@ def rate_text(info: Optional[db.UsdRate]) -> str:
         return "USD rate: unknown (do not guess one)"
     if info.source == "cbu":
         return f"USD rate: 1 USD = {info.rate:f} UZS (Central Bank of Uzbekistan, {info.day:%d.%m.%Y})"
+    if info.source == "market":
+        return (f"USD rate: 1 USD = {info.rate:f} UZS (international market rate, not the Central Bank, "
+                f"{info.day:%d.%m.%Y})")
     return f"USD rate: 1 USD = {info.rate:f} UZS (set manually by the user)"
 
 

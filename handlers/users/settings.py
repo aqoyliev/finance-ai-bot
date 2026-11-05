@@ -24,8 +24,8 @@ AUTO_WORDS = {"auto", "avto", "авто"}
 
 
 def rate_source(info, lang: str) -> str:
-    if info.source == "cbu":
-        return t("rate_source_cbu", lang, date=info.day.strftime("%d.%m.%Y"))
+    if info.source in ("cbu", "market"):
+        return t(f"rate_source_{info.source}", lang, date=info.day.strftime("%d.%m.%Y"))
     return t("rate_source_manual", lang)
 
 

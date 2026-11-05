@@ -27,14 +27,15 @@ asyncio.run(_migrate())
 
 @pytest.fixture(autouse=True)
 def no_network_rates(monkeypatch):
-    """Tests never reach cbu.uz: by default the fetch fails (no official rate); tests mock `fetch_cbu` themselves."""
+    """Tests never reach cbu.uz: by default the fetch fails (no official rate); tests mock the fetchers themselves."""
     from utils import rates
 
     async def unreachable():
         raise rates.RateError("network is disabled in tests")
 
     rates.reset()
-    monkeypatch.setattr(rates, "fetch_cbu", unreachable)
+    for name in ("fetch_cbu", "fetch_er_api", "fetch_currency_api"):
+        monkeypatch.setattr(rates, name, unreachable)
     yield
     rates.reset()
 

@@ -82,8 +82,8 @@ TOOLS: List[dict] = [
           "and what is left. Spending in the other currency is converted at the USD rate in use (get_exchange_rate)."),
     _tool("get_categories", "The user's expense categories with their subcategories, and income categories."),
     _tool("get_exchange_rate",
-          "The USD -> UZS rate in use with its source and date: the official Central Bank of Uzbekistan rate, or "
-          "the user's own override set with /rate (used for combined totals). usd_to_uzs is null if no rate is "
+          "The USD -> UZS rate in use with its source and date: the official Central Bank of Uzbekistan rate (or, if "
+          "that is unreachable, an international market rate, marked as such), or the user's own override set with /rate (used for combined totals). usd_to_uzs is null if no rate is "
           "known. This is the only source for exchange rates; never quote one from memory."),
 ]
 
@@ -280,9 +280,9 @@ def rate_json(info: Optional[db.UsdRate]) -> dict:
     """The rate in use with its source and date, for tool results and prompts (None: no rate is known)."""
     if info is None:
         return {"usd_to_uzs": None, "source": None, "date": None}
-    official = info.source == "cbu"
-    return {"usd_to_uzs": str(info.rate),
-            "source": "Central Bank of Uzbekistan official rate" if official else "set manually by the user (/rate)",
+    source = {"cbu": "Central Bank of Uzbekistan official rate",
+              "market": "international market rate (not the Central Bank)"}.get(info.source, "set manually by the user (/rate)")
+    return {"usd_to_uzs": str(info.rate), "source": source,
             "date": info.day.isoformat() if info.day else None}
 
 

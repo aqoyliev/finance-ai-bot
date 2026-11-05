@@ -1,4 +1,5 @@
-"""Official USD rate (CBU): parsing, cache, failure fallback, manual override vs auto, /rate, migration 0006."""
+"""Default USD rate (CBU + market fallbacks): parsing, chain, validation, cache, failure fallback, manual override vs auto,
+/rate, source labels, migrations 0006 and 0007."""
 import asyncio
 import json
 import logging
@@ -24,7 +25,8 @@ from test_services import USER, setup_user
 
 PAYLOAD = [{"id": 69, "Code": "840", "Ccy": "USD", "CcyNm_UZ": "AQSh dollari", "Nominal": "1",
             "Rate": "12850.37", "Diff": "-1.2", "Date": "05.11.2026"}]
-REAL_FETCH = rates.fetch_cbu  # the autouse fixture replaces rates.fetch_cbu (no network in tests)
+REAL_FETCH = rates.fetch_cbu
+REAL_ER, REAL_CDN = rates.fetch_er_api, rates.fetch_currency_api  # the autouse fixture replaces rates.fetch_cbu (no network in tests)
 OFFICIAL = rates.OfficialUsd(Decimal("12850.37"), date(2026, 11, 5))
 
 
@@ -113,7 +115,7 @@ async def test_failure_keeps_last_value_and_logs_warning(monkeypatch, caplog):
     mock_fetch(monkeypatch, rates.RateError("HTTP 500"))
     with caplog.at_level(logging.WARNING, logger="utils.rates"):
         assert await rates.refresh() == OFFICIAL
-    assert any("CBU" in r.getMessage() and r.levelno == logging.WARNING for r in caplog.records)
+    assert any("USD rate" in r.getMessage() and r.levelno == logging.WARNING for r in caplog.records)
     assert await rates.get_official() == OFFICIAL
 
 
@@ -251,7 +253,10 @@ async def test_rate_command_set_variants_and_errors(monkeypatch):
 async def test_rate_command_when_cbu_is_unreachable(monkeypatch):
     await setup_user()
     mock_fetch(monkeypatch, OSError("down"))
-    assert "could not be fetched" in await rate("")
+    text = await rate("")
+    assert "could not be fetched" in text and "Central Bank" not in text
+    for lang in ("uz", "ru"):
+        assert "Markaziy" not in await rate("", lang) and "Центро" not in await rate("", lang)
 
 
 def test_rate_texts_exist_in_all_languages_and_mention_auto():
@@ -308,8 +313,176 @@ def test_migration_0006_creates_the_table_and_clears_manual_rates():
         assert conn.execute(sa.text("SELECT count(*) FROM exchange_rates")).scalar() == 0
         assert conn.execute(sa.text("SELECT count(*) FROM users")).scalar() == 2  # only the rates were cleared
         columns = {c["name"] for c in sa.inspect(conn).get_columns("official_rates")}
-        assert columns == {"currency", "rate", "rate_date", "fetched_at"}
-        assert conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalar() == "0006"
+        assert columns == {"currency", "rate", "rate_date", "source", "fetched_at"}
+        assert conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalar() == "0007"
         command.downgrade(alembic_config(conn), "0005")
         assert "official_rates" not in sa.inspect(conn).get_table_names()
+    engine.dispose()
+
+
+# ---- Fallback chain, validation, source labels, migration 0007 ----
+
+ER_PAYLOAD = {"result": "success", "rates": {"UZS": 11910.62, "EUR": 0.86},
+              "time_last_update_utc": "Wed, 04 Nov 2026 00:02:31 +0000"}
+CDN_PAYLOAD = {"date": "2026-11-05", "usd": {"uzs": 11885.05, "eur": 0.86}}
+MARKET = rates.OfficialUsd(Decimal("11910.62"), date(2026, 11, 4), "market")
+
+
+def mock_chain(monkeypatch, **outcomes):
+    """Replace the three fetchers; each outcome is a value to return or an exception to raise. Returns the call order."""
+    order = []
+
+    def make(name):
+        async def fetch():
+            order.append(name)
+            outcome = outcomes[name]
+            if isinstance(outcome, BaseException):
+                raise outcome
+            return outcome
+        return fetch
+
+    for name, attr in (("cbu", "fetch_cbu"), ("er", "fetch_er_api"), ("cdn", "fetch_currency_api")):
+        outcomes.setdefault(name, rates.RateError("unused"))
+        monkeypatch.setattr(rates, attr, make(name))
+    return order
+
+
+def test_parse_fallback_payloads():
+    assert rates.parse_er_api(ER_PAYLOAD) == MARKET
+    assert rates.parse_currency_api(CDN_PAYLOAD) == rates.OfficialUsd(Decimal("11885.05"), date(2026, 11, 5), "market")
+    assert rates.parse_cbu(PAYLOAD).source == "cbu"
+
+
+def test_missing_source_date_falls_back_to_today_in_tashkent(monkeypatch):
+    monkeypatch.setattr(rates, "today_tashkent", lambda: date(2030, 1, 2))
+    assert rates.parse_er_api({"result": "success", "rates": {"UZS": 11910.62}}).day == date(2030, 1, 2)
+    assert rates.parse_er_api({**ER_PAYLOAD, "time_last_update_utc": "garbage"}).day == date(2030, 1, 2)
+    assert rates.parse_currency_api({"usd": {"uzs": 11885.05}}).day == date(2030, 1, 2)
+    assert rates.parse_currency_api({"date": "x", "usd": {"uzs": 11885.05}}).day == date(2030, 1, 2)
+    assert isinstance(rates.today_tashkent(), date)
+
+
+@pytest.mark.parametrize("value", [1000, 100000, 999.99, 0, -5, 1e9, "abc", None, float("nan"), float("inf"), True, [], {}])
+def test_validation_rejects_out_of_range_and_non_numbers(value):
+    with pytest.raises(rates.RateError):
+        rates.check_rate(value)
+    with pytest.raises(rates.RateError):
+        rates.parse_er_api({**ER_PAYLOAD, "rates": {"UZS": value}})
+    with pytest.raises(rates.RateError):
+        rates.parse_currency_api({**CDN_PAYLOAD, "usd": {"uzs": value}})
+    with pytest.raises(rates.RateError):
+        rates.parse_cbu([{"Ccy": "USD", "Rate": str(value), "Date": "05.11.2026"}])
+
+
+@pytest.mark.parametrize("payload", [None, [], "x", {}, {"result": "error"}, {"result": "success"},
+                                     {"result": "success", "rates": {}}, {"result": "success", "rates": []}])
+def test_bad_er_api_payloads(payload):
+    with pytest.raises(rates.RateError):
+        rates.parse_er_api(payload)
+
+
+@pytest.mark.parametrize("payload", [None, [], "x", {}, {"usd": {}}, {"usd": []}, {"date": "2026-11-05"}])
+def test_bad_currency_api_payloads(payload):
+    with pytest.raises(rates.RateError):
+        rates.parse_currency_api(payload)
+
+
+def test_chain_constants():
+    assert rates.CBU_TIMEOUT == 5 and rates.TIMEOUT_SECONDS == 10 and rates.USER_AGENT == "finance-ai-bot"
+    assert [name for name, _ in rates._chain()] == ["cbu.uz", "open.er-api.com", "currency-api"]
+
+
+async def test_chain_uses_cbu_first_and_stops_there(monkeypatch):
+    order = mock_chain(monkeypatch, cbu=OFFICIAL, er=MARKET)
+    assert await rates.fetch_official() == OFFICIAL
+    assert order == ["cbu"]
+
+
+async def test_chain_falls_back_when_cbu_times_out(monkeypatch):
+    order = mock_chain(monkeypatch, cbu=asyncio.TimeoutError(), er=MARKET)
+    assert await rates.fetch_official() == MARKET
+    assert order == ["cbu", "er"]
+
+
+async def test_chain_goes_to_the_third_source_and_fails_when_all_fail(monkeypatch):
+    third = rates.OfficialUsd(Decimal("11885.05"), date(2026, 11, 5), "market")
+    order = mock_chain(monkeypatch, cbu=asyncio.TimeoutError(), er=rates.RateError("HTTP 500"), cdn=third)
+    assert await rates.fetch_official() == third
+    assert order == ["cbu", "er", "cdn"]
+    order = mock_chain(monkeypatch, cbu=asyncio.TimeoutError(), er=OSError("down"), cdn=rates.RateError("bad"))
+    with pytest.raises(rates.RateError):
+        await rates.fetch_official()
+    assert order == ["cbu", "er", "cdn"]
+
+
+async def test_fallback_value_is_cached_and_stored_with_its_source(monkeypatch):
+    order = mock_chain(monkeypatch, cbu=asyncio.TimeoutError(), er=MARKET)
+    assert await rates.get_official() == MARKET
+    assert await rates.get_official() == MARKET
+    assert order == ["cbu", "er"]  # cached: no second round
+    rates.reset()  # "restart": the source survives in the database
+    mock_chain(monkeypatch, cbu=OSError("down"), er=OSError("down"), cdn=OSError("down"))
+    stored = await rates.get_official()
+    assert stored == MARKET and stored.source == "market"
+
+
+async def test_real_http_fetch_sends_user_agent_and_fallback_parsers(monkeypatch):
+    seen = []
+
+    async def er(request):
+        seen.append(request.headers.get("User-Agent"))
+        return web.json_response(ER_PAYLOAD)
+
+    async def cdn(request):
+        seen.append(request.headers.get("User-Agent"))
+        return web.Response(text=json.dumps(CDN_PAYLOAD), content_type="text/plain")
+
+    app = web.Application()
+    app.router.add_get("/er", er)
+    app.router.add_get("/cdn", cdn)
+    async with TestServer(app) as server:
+        monkeypatch.setattr(rates, "ER_API_URL", str(server.make_url("/er")))
+        monkeypatch.setattr(rates, "CURRENCY_API_URL", str(server.make_url("/cdn")))
+        assert await REAL_ER() == MARKET
+        assert (await REAL_CDN()).rate == Decimal("11885.05")
+    assert seen == ["finance-ai-bot", "finance-ai-bot"]
+
+
+async def test_source_labels_in_rate_command_ai_context_and_tool(monkeypatch):
+    await setup_user()
+    mock_fetch(monkeypatch, MARKET)
+    assert "1 USD = 11910.62 UZS (international market rate, 04.11.2026)" in await rate("")
+    assert "xalqaro bozor kursi, 04.11.2026" in await rate("", "uz")
+    assert "международный рыночный курс, 04.11.2026" in await rate("", "ru")
+    assert "Central Bank, " not in await rate("")
+    info = await db.get_usd_rate_info(USER)
+    assert info.source == "market" and info.day == date(2026, 11, 4)
+    assert "international market rate, not the Central Bank, 04.11.2026" in assistant.context_line(
+        date(2026, 11, 5), 1, "uz", info)
+    result = await tools.get_exchange_rate(USER)
+    assert result == {"usd_to_uzs": "11910.62", "source": "international market rate (not the Central Bank)",
+                      "date": "2026-11-04"}
+    for lang in LANGUAGES:
+        assert "{" not in t("rate_source_market", lang, date="d") and "d" in t("rate_source_market", lang, date="d")
+
+
+def test_migration_0007_adds_source_defaulting_to_cbu():
+    from alembic import command
+
+    path = Path(tempfile.mkdtemp(prefix="finance-bot-mig-")) / "m.db"
+    engine = sa.create_engine("sqlite:///" + str(path).replace("\\", "/"))
+    with engine.begin() as conn:
+        command.upgrade(alembic_config(conn), "0006")
+        assert "source" not in {c["name"] for c in sa.inspect(conn).get_columns("official_rates")}
+        conn.execute(sa.text("INSERT INTO official_rates (currency, rate, rate_date, fetched_at) "
+                             "VALUES ('USD', '12850.37', '2026-11-05', '2026-11-05 00:00:00')"))
+        command.upgrade(alembic_config(conn), "head")
+        assert conn.execute(sa.text("SELECT source FROM official_rates")).scalar() == "cbu"
+        assert conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalar() == "0007"
+        conn.execute(sa.text("INSERT INTO official_rates (currency, rate, rate_date, fetched_at) "
+                             "VALUES ('EUR', '14000', '2026-11-05', '2026-11-05 00:00:00')"))
+        assert conn.execute(sa.text("SELECT source FROM official_rates WHERE currency = 'EUR'")).scalar() == "cbu"
+        command.downgrade(alembic_config(conn), "0006")
+        assert "source" not in {c["name"] for c in sa.inspect(conn).get_columns("official_rates")}
+        assert conn.execute(sa.text("SELECT count(*) FROM official_rates")).scalar() == 2
     engine.dispose()

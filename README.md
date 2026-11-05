@@ -105,20 +105,30 @@ Setup: `pip install -r requirements.txt`, then `python -m playwright install chr
 ### USD exchange rate
 
 By default the bot uses the **official rate of the Central Bank of Uzbekistan** (`https://cbu.uz/uz/arkhiv-kursov-valyut/json/USD/`,
-the `Rate` and `Date` of the `USD` item). `utils/rates.py` fetches it with aiohttp (10 s timeout), caches it in memory for 6 hours
-and stores the last good value in the `official_rates` table, so a restart or a CBU outage still has a rate. A background
-task (started in `on_startup`, cancelled on shutdown) refreshes it at startup and then every 6 hours (every 30 minutes
-after a failure); a failed fetch only logs a warning and keeps the last value. If no rate was ever received (CBU
-unreachable on the very first start) combined totals and cross-currency budget amounts are simply skipped.
+the `Rate` and `Date` of the `USD` item). cbu.uz is geo-blocked outside Uzbekistan (it times out on Railway), so
+`utils/rates.py` fetches the rate through a **fallback chain** with aiohttp and the User-Agent `finance-ai-bot`:
 
-- `/rate` shows the rate in use and its source: `Markaziy bank, dd.mm.yyyy` (official) or `qo'lda` (manual).
+1. cbu.uz (5 s timeout), source `cbu`;
+2. `https://open.er-api.com/v6/latest/USD` (`rates.UZS`, 10 s), source `market`;
+3. `https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json` (`usd.uzs`, 10 s), source `market`.
+
+Each value must be a finite number with 1000 < rate < 100000, otherwise that source counts as failed. The date is the
+source's own date, or today in Asia/Tashkent if it gives none. The rate is cached in memory for 6 hours and the last good
+value (with its source) is stored in the `official_rates` table, so a restart or an outage still has a rate. A background
+task (started in `on_startup`, cancelled on shutdown) refreshes it at startup and then every 6 hours (every 30 minutes
+after a failure); a failed fetch only logs a warning and keeps the last value. If no source ever answered, combined totals
+and cross-currency budget amounts are simply skipped.
+
+- `/rate` shows the rate in use and its source: `Markaziy bank, dd.mm.yyyy` (official), `xalqaro bozor kursi, dd.mm.yyyy`
+  (international market rate, when the Central Bank was unreachable) or `qo'lda` (manual). The same source (and its date)
+  is given to the AI in the context line and the `get_exchange_rate` tool.
 - `/rate 1 USD 12850 UZS` sets your own override (the example value is a placeholder); `/rate auto` (also `avto` / `авто`)
   removes it and returns to the Central Bank rate.
 - The AI assistant never states a rate from memory: the rate, its source and date are put into the context line and the
   `get_exchange_rate` tool result (and into the advice figures), and the system prompts forbid quoting any other.
 
 Migration `0006` creates `official_rates` and deletes all existing manual rates (`exchange_rates`), so everyone starts
-on the Central Bank rate.
+on the default rate. Migration `0007` adds `official_rates.source` (`cbu` | `market`, existing rows become `cbu`).
 
 ### Budgets and alerts
 
@@ -423,7 +433,7 @@ The Claude and Gemini SDKs are mocked, so no API key is needed and no requests a
 ├── middlewares/           # access (ADMINS only), language, throttling
 ├── states/                # FSM states
 ├── filters/               # custom filters
-├── migrations/            # alembic migrations (0006: official rates)
+├── migrations/            # alembic migrations (0007: rate source)
 ├── webapp/                # Mini App page: index.html, app.css, app.js (no build step)
 ├── tests/                 # pytest suite (service layer, reports / alerts / charts, AI parsing with mocked Claude / Gemini clients)
 └── utils/
@@ -434,7 +444,7 @@ The Claude and Gemini SDKs are mocked, so no API key is needed and no requests a
     ├── miniapp/           # Mini App web server (aiohttp), JSON API, initData validation
     ├── misc/              # logging, throttling decorator
     ├── notify_admins.py   # start-up notification
-    ├── rates.py           # official USD rate of the Central Bank of Uzbekistan (fetch, cache, background refresh)
+    ├── rates.py           # default USD rate: Central Bank of Uzbekistan + market fallbacks (fetch chain, cache, background refresh)
     ├── notify_alerts.py   # sends limit alerts after operations are saved / edited
     └── set_bot_commands.py
 ```

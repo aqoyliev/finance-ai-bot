@@ -264,19 +264,19 @@ async def expense_by_subcategory(user_id: int, category: str, start: date,
 class UsdRate:
     """The USD -> UZS rate in use and where it comes from."""
     rate: Decimal
-    source: str  # "cbu" (official, set by the Central Bank for `day`) | "manual" (the user's /rate override)
+    source: str  # "cbu" (Central Bank, for `day`) | "market" (international fallback) | "manual" (user's /rate override)
     day: Optional[date] = None
 
 
 async def get_usd_rate_info(user_id: int) -> Optional[UsdRate]:
-    """The user's manual /rate override if set, otherwise the Central Bank rate; None if neither is known."""
+    """The user's manual /rate override if set, otherwise the Central Bank / market rate; None if neither is known."""
     async with session_factory() as session:
         row = await session.get(ExchangeRate, (user_id, "USD", "UZS"))
     manual = parse_rate(row.rate) if row else None
     if manual:
         return UsdRate(manual, "manual", row.updated_at.date())
     official = await rates.get_official()
-    return UsdRate(official.rate, "cbu", official.day) if official else None
+    return UsdRate(official.rate, official.source, official.day) if official else None
 
 
 async def get_usd_rate(user_id: int) -> Optional[Decimal]:
