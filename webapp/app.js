@@ -1,8 +1,8 @@
 /* Finance bot Mini App. Plain JS, no build step.
  * Screens (hash routes): Home "#/", History "#/history", Report "#/report", Settings "#/settings",
  * new / edit operation "#/op/new" and "#/op/{id}", budgets "#/budgets", cards "#/cards", "#/card/{id}",
- * "#/edit/{id}" and "#/new" (add a card).
- * Every API call sends Telegram.WebApp.initData; the server checks its signature and the ADMINS list.
+ * "#/edit/{id}", "#/new" (add a card) and "#/users" (who may use the bot; owners / superadmins only).
+ * Every API call sends Telegram.WebApp.initData; the server checks its signature and the caller's access.
  * Amounts travel as integers in minor units (amount * 100). */
 (function () {
   "use strict";
@@ -21,6 +21,8 @@
   var ICON_EDIT = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4z"/></svg>';
   var ICON_PLUS = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';
   var ICON_SEARCH = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8FA19B" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg>';
+  var ICON_X = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+  var ICON_PERSON = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 20c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>';
   var ICON_SPARK = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FBFAF4" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l2.2 5.8L20 11l-5.8 2.2L12 19l-2.2-5.8L4 11l5.8-2.2z"/></svg>';
   var TAB_ICONS = {
     home: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" aria-hidden="true"><path d="M4 11l8-7 8 7v9h-5v-6H9v6H4z"/></svg>',
@@ -204,7 +206,8 @@
     currency_locked: "err_currency_locked", not_found: "err_not_found", auth: "err_auth", forbidden: "err_forbidden",
     category: "err_category", account: "err_account", same_account: "err_same_account",
     currency_mismatch: "err_currency_mismatch", date: "err_date", note: "err_note", locked: "err_locked",
-    start: "err_start", rate: "err_rate", salary_day: "err_salary_day"
+    start: "err_start", rate: "err_rate", salary_day: "err_salary_day", username: "err_username",
+    exists: "err_exists", not_manager: "err_not_manager"
   };
 
   function errorText(err) {
@@ -228,7 +231,7 @@
     var m;
     if ((m = hash.match(/^#\/edit\/(\d+)$/))) return "#/card/" + m[1];
     if (/^#\/card\/\d+$/.test(hash) || hash === "#/new") return "#/cards";
-    if (hash === "#/budgets") return "#/settings";
+    if (hash === "#/budgets" || hash === "#/users") return "#/settings";
     return "#/";
   }
 
@@ -261,6 +264,7 @@
     if (hash === "#/report") return showReport();
     if (hash === "#/settings") return showSettings();
     if (hash === "#/budgets") return showBudgets();
+    if (hash === "#/users") return showUsers();
     return showHome();
   }
 
@@ -914,6 +918,12 @@
         h("div", { class: "dash" }),
         h("button", { class: "srow", type: "button", onclick: function () { go("#/budgets"); } },
           h("span", { class: "k" }, h("b", null, tr("set_budgets")), h("span", null, tr("budgets_count", { n: s.budgets_count }))), h("span", { class: "v" }, "›"))),
+      s.can_manage_users ? [
+        h("div", { class: "sec" }, tr("sec_manage")),
+        h("div", { class: "slip sslip" },
+          h("button", { class: "srow", type: "button", onclick: function () { go("#/users"); } },
+            h("span", { class: "k" }, h("b", null, tr("set_users")), h("span", null, tr("users_count", { n: s.users_count }))), h("span", { class: "v" }, "›")))
+      ] : null,
       h("div", { class: "sec" }, tr("sec_ai")),
       h("div", { class: "slip sslip" },
         switchRow("weekly", tr("adv_weekly"), tr("adv_weekly_hint")),
@@ -1011,6 +1021,146 @@
       h("div", { class: "row2" },
         h("button", { class: "btn paper", type: "button", style: "border:2px solid var(--ink)", onclick: showBudgets }, tr("cancel"))),
       del);
+  }
+
+  // ---- Users (owners / superadmins only) ----
+
+  var usersQuery = "";
+  // "@Name", "t.me/name" -> "name"; null when it is not a valid Telegram username
+  function cleanUsername(text) {
+    var v = String(text || "").trim().replace(/^(https?:\/\/)?(www\.)?(t|telegram)\.me\//i, "").replace(/^@+/, "").split("?")[0].replace(/\/+$/, "");
+    return /^[A-Za-z0-9_]{5,32}$/.test(v) ? v : null;
+  }
+
+  function initial(text) {
+    var c = String(text || "").replace(/^@/, "").trim().charAt(0);
+    return c ? c.toUpperCase() : "?";
+  }
+
+  function fetchUsers() {
+    return Promise.all([api("GET", "users"), api("GET", "visitors?" + qs({ q: usersQuery }))]);
+  }
+
+  function showUsers() {
+    loading();
+    load(fetchUsers(), drawUsers);
+  }
+
+  function reloadUsers() { load(fetchUsers(), drawUsers); }
+
+  function drawUsers(result) {
+    var grants = result[0].grants, visitors = result[1].visitors;
+    var id = renderId;
+
+    var input = h("input", { "aria-label": "Username", placeholder: "username", autocomplete: "off", autocapitalize: "off",
+      spellcheck: "false", enterkeyhint: "done" });
+    var atBox = h("label", { class: "at" }, h("b", null, "@"), input);
+    var addBtn = h("button", { class: "btn-red", type: "button" }, tr("users_add"));
+    function addUser() {
+      var name = cleanUsername(input.value);
+      if (!name) { atBox.classList.add("bad"); haptic("error"); toast(tr("err_username"), true); return; }
+      atBox.classList.remove("bad");
+      addBtn.disabled = true;
+      api("POST", "users", { username: name }).then(function () {
+        haptic("success"); toast(tr("users_added")); reloadUsers();
+      }).catch(function (err) { addBtn.disabled = false; haptic("error"); toast(errorText(err), true); });
+    }
+    addBtn.addEventListener("click", addUser);
+    input.addEventListener("input", function () { atBox.classList.remove("bad"); });
+    input.addEventListener("keydown", function (e) { if (e.key === "Enter") addUser(); });
+
+    var pickBtn = h("button", { class: "btn-line", type: "button" }, h("span", { html: ICON_PERSON, style: "display:flex" }), tr("users_pick"));
+    pickBtn.addEventListener("click", function () {
+      pickBtn.disabled = true;
+      api("POST", "users/pick", {}).then(function () {
+        haptic("success");
+        if (tg && tg.close) { try { tg.close(); return; } catch (e) { /* fall back to a toast */ } }
+        pickBtn.disabled = false;
+        toast(tr("users_pick_sent"));
+      }).catch(function (err) { pickBtn.disabled = false; haptic("error"); toast(errorText(err), true); });
+    });
+
+    var grantList = h("div", { class: "slip uslip" });
+    if (!grants.length) grantList.appendChild(h("div", { class: "empty mute" }, tr("users_none")));
+    grants.forEach(function (g, i) {
+      if (i) grantList.appendChild(h("div", { class: "dash" }));
+      grantList.appendChild(grantRow(g));
+    });
+
+    var visitorBox = h("div", { class: "slip uslip vis" });
+    function fillVisitors(list) {
+      visitorBox.textContent = "";
+      visitorBox.appendChild(h("div", { class: "perf b" }));
+      if (!list.length) visitorBox.appendChild(h("div", { class: "empty mute" }, tr("users_no_visitors")));
+      list.forEach(function (v, i) {
+        if (i) visitorBox.appendChild(h("div", { class: "dash" }));
+        visitorBox.appendChild(visitorRow(v));
+      });
+    }
+    fillVisitors(visitors);
+
+    var search = h("input", { "aria-label": tr("search"), placeholder: tr("users_search"), autocomplete: "off", value: usersQuery });
+    var timer = null, asked = 0;
+    search.addEventListener("input", function () {
+      clearTimeout(timer);
+      timer = setTimeout(function () {
+        usersQuery = search.value.trim();
+        var mine = ++asked;
+        api("GET", "visitors?" + qs({ q: usersQuery })).then(function (data) {
+          if (id === renderId && mine === asked) fillVisitors(data.visitors);
+        }).catch(function (err) { if (id === renderId) toast(errorText(err), true); });
+      }, 300);
+    });
+
+    mount(
+      topBar(tr("title_users"), back),
+      h("div", { class: "slip uadd" },
+        h("span", { class: "lbl" }, tr("users_add_title")),
+        h("div", { class: "line" }, atBox, addBtn),
+        pickBtn,
+        h("span", { class: "uhint" }, tr("users_hint"))),
+      h("div", { class: "sec split" }, h("span", null, tr("users_granted")), h("span", null, "[" + grants.length + "]")),
+      grantList,
+      h("div", { class: "sec" }, tr("users_visitors")),
+      h("label", { class: "search", style: "margin-bottom:10px" }, h("span", { html: ICON_SEARCH, style: "display:flex" }), search),
+      visitorBox,
+      h("div", { style: "height:24px" })
+    );
+  }
+
+  function grantRow(g) {
+    var title = g.display_name || (g.username ? "@" + g.username : String(g.user_id));
+    var remove = h("button", { class: "ux", type: "button", "aria-label": tr("users_remove"), html: ICON_X, onclick: function () {
+      confirmBox(tr("users_confirm_remove", { name: title }), function (ok) {
+        if (!ok) return;
+        api("DELETE", "users/" + g.id).then(function () {
+          haptic("success"); toast(tr("users_removed")); reloadUsers();
+        }).catch(function (err) { haptic("error"); toast(errorText(err), true); });
+      });
+    } });
+    if (g.pending) {
+      return h("div", { class: "urow" }, h("span", { class: "av p" }, "@"),
+        h("span", { class: "k" }, h("b", null, "@" + g.username),
+          h("span", { class: "pend" }, h("span", { class: "tag sm" }, tr("users_pending")), tr("users_pending_hint"))),
+        remove);
+    }
+    return h("div", { class: "urow" }, h("span", { class: "av" }, initial(title)),
+      h("span", { class: "k" }, h("b", null, title), h("span", null, g.username ? "@" + g.username : tr("users_no_username"))),
+      remove);
+  }
+
+  function visitorRow(v) {
+    var title = v.name || (v.username ? "@" + v.username : String(v.user_id));
+    var btn = h("button", { class: "mini add", type: "button" }, tr("users_grant"));
+    btn.addEventListener("click", function () {
+      btn.disabled = true;
+      api("POST", "users/" + v.user_id + "/grant", {}).then(function () {
+        haptic("success"); toast(tr("users_added")); reloadUsers();
+      }).catch(function (err) { btn.disabled = false; haptic("error"); toast(errorText(err), true); });
+    });
+    var meta = (v.username ? "@" + v.username : tr("users_no_username")) + " · " + ddmm(v.last_seen);
+    return h("div", { class: "urow" }, h("span", { class: "av" }, initial(title)),
+      h("span", { class: "k" }, h("b", null, title), h("span", null, meta)), btn);
   }
 
   // ---- Cards: list ----

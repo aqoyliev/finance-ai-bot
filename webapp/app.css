@@ -278,3 +278,31 @@ button.srow { cursor: pointer; }
 .budgets .dash { margin: 0 16px; }
 .bform { margin: 6px 16px 0; padding: 20px 18px 22px; display: flex; flex-direction: column; gap: 18px; }
 .bform .row2 { display: flex; gap: 10px; }
+
+/* ---- Users (owners / superadmins) ---- */
+.sec.split { display: flex; justify-content: space-between; gap: 8px; }
+.uadd { margin: 8px 16px 0; padding: 16px 16px 18px; display: flex; flex-direction: column; gap: 12px; }
+.uadd .line { display: flex; gap: 8px; align-items: center; }
+.at { flex: 1; min-width: 0; height: 44px; border-bottom: 2px dashed var(--ink); display: flex; align-items: center; gap: 2px; }
+.at:focus-within { border-bottom-style: solid; }
+.at.bad { border-bottom-color: var(--red); }
+.at b { font-size: 16px; font-weight: 800; color: var(--mute); }
+.at input { flex: 1; min-width: 0; height: 100%; border: 0; padding: 0; background: transparent; font-size: 16px; font-weight: 700; color: var(--ink); outline: none; }
+.at input::placeholder { color: var(--dots); font-weight: 500; }
+.btn-red { flex: none; height: 44px; border: 0; border-radius: 10px; background: var(--red); color: #FFFFFF; font-size: 13px; font-weight: 800; letter-spacing: 1px; padding: 0 16px; cursor: pointer; }
+.btn-line { width: 100%; height: 44px; border-radius: 10px; border: 2px solid var(--ink); background: transparent; font-size: 13px; font-weight: 800; color: var(--ink); display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; }
+.btn-red:disabled, .btn-line:disabled { opacity: 0.6; cursor: default; }
+.uhint { font-size: 11px; color: var(--mute); line-height: 1.5; }
+.uslip { margin: 0 16px; padding: 4px 0; }
+.uslip.vis { padding-bottom: 10px; }
+.uslip .dash { margin: 0 16px; }
+.urow { display: flex; align-items: center; gap: 10px; padding: 0 16px; min-height: 52px; color: var(--ink); }
+.urow .k { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.urow .k b { font-size: 14px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.urow .k > span { font-size: 11px; color: var(--mute); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.urow .pend { display: flex; gap: 6px; align-items: center; }
+.tag.sm { font-size: 9px; letter-spacing: 1.5px; border-width: 1.5px; border-radius: 4px; padding: 1px 5px; color: var(--mute); }
+.av { width: 34px; height: 34px; border-radius: 50%; background: var(--ink); color: var(--paper); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 800; flex-shrink: 0; }
+.av.p { background: transparent; border: 2px dashed var(--dots); color: var(--mute); }
+.ux { width: 44px; height: 44px; flex: none; border: 0; padding: 0; background: transparent; display: flex; align-items: center; justify-content: center; color: var(--red); cursor: pointer; }
+.mini.add { height: 32px; padding: 0 10px; flex: none; }

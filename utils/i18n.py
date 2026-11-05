@@ -137,6 +137,33 @@ TEXTS = {
     "old_kb_settings": {"uz": "⚙️ Sozlamalar", "ru": "⚙️ Настройки", "en": "⚙️ Settings"},
     "menu_miniapp": {"uz": "Ilova", "ru": "Приложение", "en": "App"},
 
+    # ---- Access (users managed in the Mini App) ----
+    "visitor_knocks": {
+        "uz": "👤 {name} ({username}) botga kirmoqchi",
+        "ru": "👤 {name} ({username}) хочет пользоваться ботом",
+        "en": "👤 {name} ({username}) wants to use the bot",
+    },
+    "no_username": {"uz": "username yo'q", "ru": "без username", "en": "no username"},
+    "btn_grant": {"uz": "✅ Ruxsat berish", "ru": "✅ Дать доступ", "en": "✅ Grant access"},
+    "grant_done": {"uz": "✅ {name} — ruxsat berildi", "ru": "✅ {name} — доступ выдан", "en": "✅ {name} — access granted"},
+    "grant_already": {"uz": "Bu odamda allaqachon ruxsat bor", "ru": "У этого человека уже есть доступ",
+                      "en": "This person already has access"},
+    "grant_not_manager": {"uz": "Faqat admin ruxsat bera oladi", "ru": "Выдавать доступ может только админ",
+                          "en": "Only an admin can grant access"},
+    "access_granted": {
+        "uz": "✅ Sizga botdan foydalanishga ruxsat berildi! Boshlash uchun /start bosing.",
+        "ru": "✅ Вам открыли доступ к боту! Чтобы начать, нажмите /start.",
+        "en": "✅ You now have access to the bot! Tap /start to begin.",
+    },
+    "picker_prompt": {
+        "uz": "Ruxsat beriladigan odamni kontaktlardan tanlang 👇",
+        "ru": "Выберите в контактах, кому дать доступ 👇",
+        "en": "Pick the person to give access to from your contacts 👇",
+    },
+    "picker_btn": {"uz": "👤 Tanlash", "ru": "👤 Выбрать", "en": "👤 Choose"},
+    "picker_cancel": {"uz": "❌ Bekor qilish", "ru": "❌ Отмена", "en": "❌ Cancel"},
+    "picker_cancelled": {"uz": "Bekor qilindi", "ru": "Отменено", "en": "Cancelled"},
+
     # ---- Saved operations ----
     "no_accounts_in_currency": {
         "uz": "Sizda hali {currency} hisoblari yo'q.",
@@ -688,6 +715,44 @@ WEBAPP_TEXTS = {
         "en": "The bot messages you in the chat when spending reaches 80% and 100% of a limit.",
     },
     "cancel": {"uz": "BEKOR QILISH", "ru": "ОТМЕНА", "en": "CANCEL"},
+
+    # ---- Users (owners / superadmins only) ----
+    "sec_manage": {"uz": "BOSHQARUV", "ru": "УПРАВЛЕНИЕ", "en": "MANAGEMENT"},
+    "set_users": {"uz": "Foydalanuvchilar", "ru": "Пользователи", "en": "Users"},
+    "users_count": {"uz": "{n} kishiga ruxsat · faqat admin ko'radi", "ru": "доступ у {n} чел. · видит только админ",
+                    "en": "{n} with access · admins only"},
+    "title_users": {"uz": "FOYDALANUVCHILAR", "ru": "ПОЛЬЗОВАТЕЛИ", "en": "USERS"},
+    "users_add_title": {"uz": "USERNAME BILAN QO'SHISH", "ru": "ДОБАВИТЬ ПО USERNAME", "en": "ADD BY USERNAME"},
+    "users_add": {"uz": "QO'SHISH", "ru": "ДОБАВИТЬ", "en": "ADD"},
+    "users_pick": {"uz": "Kontaktlardan tanlash", "ru": "Выбрать из контактов", "en": "Pick from contacts"},
+    "users_hint": {
+        "uz": "Username bo'lmasa: kontaktlardan tanlang yoki pastdagi ro'yxatdan toping.",
+        "ru": "Нет username: выберите из контактов или найдите в списке ниже.",
+        "en": "No username? Pick from contacts or find them in the list below.",
+    },
+    "users_granted": {"uz": "RUXSATI BOR", "ru": "ЕСТЬ ДОСТУП", "en": "HAVE ACCESS"},
+    "users_pending": {"uz": "KUTILMOQDA", "ru": "ОЖИДАЕТ", "en": "PENDING"},
+    "users_pending_hint": {"uz": "botni hali ochmagan", "ru": "ещё не открыл бота", "en": "hasn't opened the bot yet"},
+    "users_none": {"uz": "Hali hech kimga ruxsat berilmagan", "ru": "Доступа пока ни у кого нет",
+                   "en": "Nobody has access yet"},
+    "users_visitors": {"uz": "BOTNI BOSHLAGANLAR", "ru": "ЗАПУСКАЛИ БОТА", "en": "STARTED THE BOT"},
+    "users_search": {"uz": "Ism yoki username", "ru": "Имя или username", "en": "Name or username"},
+    "users_no_visitors": {"uz": "Hech kim topilmadi", "ru": "Никого не найдено", "en": "Nobody found"},
+    "users_no_username": {"uz": "username yo'q", "ru": "без username", "en": "no username"},
+    "users_grant": {"uz": "+ QO'SHISH", "ru": "+ ДОБАВИТЬ", "en": "+ ADD"},
+    "users_remove": {"uz": "Ruxsatni olib tashlash", "ru": "Забрать доступ", "en": "Remove access"},
+    "users_confirm_remove": {"uz": "{name} ruxsati olib tashlansinmi?", "ru": "Забрать доступ у {name}?",
+                             "en": "Remove access of {name}?"},
+    "users_added": {"uz": "Ruxsat berildi", "ru": "Доступ выдан", "en": "Access granted"},
+    "users_removed": {"uz": "Ruxsat olib tashlandi", "ru": "Доступ забран", "en": "Access removed"},
+    "users_pick_sent": {"uz": "Botdagi tugmani bosing", "ru": "Нажмите кнопку в чате с ботом",
+                        "en": "Tap the button in the bot chat"},
+    "err_username": {"uz": "Username noto'g'ri (5–32 belgi: harf, raqam, _)",
+                     "ru": "Неверный username (5–32 символа: буквы, цифры, _)",
+                     "en": "Invalid username (5–32 chars: letters, digits, _)"},
+    "err_exists": {"uz": "Bu odamda allaqachon ruxsat bor", "ru": "У этого человека уже есть доступ",
+                   "en": "This person already has access"},
+    "err_not_manager": {"uz": "Faqat admin uchun", "ru": "Только для админа", "en": "Admins only"},
 }
 
 

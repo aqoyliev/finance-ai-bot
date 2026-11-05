@@ -6,8 +6,12 @@ env.read_env()
 
 # Read the following from the .env file
 BOT_TOKEN = env.str("BOT_TOKEN")  # Bot token
-ADMINS = env.list("ADMINS")  # List of admins
-ADMIN_IDS = frozenset(int(admin) for admin in ADMINS if str(admin).strip().isdigit())  # who may use the bot
+ADMINS = env.list("ADMINS")  # Owners: full access, manage users, never shown in any user list
+ADMIN_IDS = frozenset(int(admin) for admin in ADMINS if str(admin).strip().isdigit())  # owner ids
+# Superadmins: use the bot and add / remove users in the Mini App; fixed here, not shown in the users list
+SUPERADMINS = env.list("SUPERADMINS", default=[])
+SUPERADMIN_IDS = frozenset(int(x) for x in SUPERADMINS if str(x).strip().isdigit()) - ADMIN_IDS
+# Everybody else needs a grant stored in the database (utils/db_api/access.py)
 IP = env.str("ip", default="")  # Hosting IP address (unused with long polling; optional)
 
 # --- Finora features ---

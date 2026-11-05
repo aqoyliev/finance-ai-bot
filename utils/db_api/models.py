@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import Optional
 
-from sqlalchemy import BigInteger, Date, DateTime, ForeignKey, Integer, String, UniqueConstraint, true
+from sqlalchemy import BigInteger, Date, DateTime, ForeignKey, Integer, String, UniqueConstraint, false, true
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base
@@ -135,3 +135,32 @@ class AlertSent(Base):
     threshold: Mapped[int] = mapped_column(Integer)  # percent: 80 | 100
     period_start: Mapped[date] = mapped_column(Date)  # start of the financial period the alert belongs to
     sent_at: Mapped[datetime] = mapped_column(DateTime)
+
+
+class AccessGrant(Base):
+    """Permission of one regular user, given by an owner / superadmin in the Mini App (see access.py).
+
+    A grant added by @username alone is "pending" (user_id is None) until that person first writes to the bot.
+    """
+    __tablename__ = "access_grants"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[Optional[int]] = mapped_column(BigInteger, unique=True)
+    username: Mapped[Optional[str]] = mapped_column(String, index=True)  # lowercase, without "@"
+    display_name: Mapped[str] = mapped_column(String, default="", server_default="")
+    added_by: Mapped[int] = mapped_column(BigInteger)
+    created_at: Mapped[datetime] = mapped_column(DateTime)
+
+
+class Visitor(Base):
+    """Everybody who wrote to the bot in a private chat (allowed or not), except the owners."""
+    __tablename__ = "visitors"
+
+    user_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
+    username: Mapped[str] = mapped_column(String, default="", server_default="")  # as in Telegram, without "@"
+    first_name: Mapped[str] = mapped_column(String, default="", server_default="")
+    last_name: Mapped[str] = mapped_column(String, default="", server_default="")
+    language_code: Mapped[str] = mapped_column(String, default="", server_default="")  # Telegram client language
+    first_seen: Mapped[datetime] = mapped_column(DateTime)
+    last_seen: Mapped[datetime] = mapped_column(DateTime, index=True)
+    notified: Mapped[bool] = mapped_column(default=False, server_default=false())  # managers were told about them

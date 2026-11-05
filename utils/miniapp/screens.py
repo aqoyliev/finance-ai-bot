@@ -1,6 +1,6 @@
 """Mini App API behind the screens Home, NewOp (add / edit / delete operations), History, Report and Settings
 (with Budgets). Registered by api.create_app next to the accounts endpoints; the auth middleware in api.py has
-already checked initData and ADMINS, so request["user_id"] is the caller and every query is scoped to it.
+already checked initData and the caller's role, so request["user_id"] is the caller and every query is scoped to it.
 
 Writes go through the same service functions the bot used (record_operation, record_transfer, update_*,
 delete_operation, set_budget, ...), and limit alerts are sent to the chat exactly as after a save in the bot.
@@ -18,6 +18,7 @@ from utils.db_api import finance as db
 from utils.db_api import reports as rep
 from utils.i18n import LANGUAGES
 
+from . import users
 from .common import (MAX_NOTE_LENGTH, MAX_QUERY_LENGTH, ApiError, account_json, clean_text, current_user, int_id,
                      minor, moment_text, parse_moment, path_id, query_int, rate_json, read_json, to_uzs,
                      tx_row_json)
@@ -391,7 +392,7 @@ async def advice(request: web.Request) -> web.Response:
 
 # ---- Settings ----
 
-async def settings_json(user) -> dict:
+async def settings_json(user, role: Optional[str] = None) -> dict:
     info = await db.get_usd_rate_info(user.id)
     budgets = await db.list_budgets(user.id)
     from utils.ai import core as ai
@@ -405,11 +406,12 @@ async def settings_json(user) -> dict:
         "advice_weekly": bool(user.advice_weekly),
         "advice_monthly": bool(user.advice_monthly),
         "ai_configured": bool(ai.get_client().configured),
+        **(await users.summary(role)),
     }
 
 
 async def get_settings(request: web.Request) -> web.Response:
-    return web.json_response(await settings_json(await current_user(request)))
+    return web.json_response(await settings_json(await current_user(request), request.get("role")))
 
 
 def parse_rate(value) -> Decimal:
@@ -458,7 +460,7 @@ async def update_settings(request: web.Request) -> web.Response:
         raise ApiError(400, "invalid")
     for change in changes:
         await change()
-    return web.json_response(await settings_json(await current_user(request)))
+    return web.json_response(await settings_json(await current_user(request), request.get("role")))
 
 
 # ---- Budgets ----

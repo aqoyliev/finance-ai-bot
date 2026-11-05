@@ -26,7 +26,11 @@ A private personal-finance bot for a single owner, built on this template.
 
 The chat is for input and questions; everything else lives in the 📱 Mini App.
 
-- 🔐 Private: only Telegram IDs listed in `ADMINS` can use it; anyone else gets one short "private bot" reply
+- 🔐 Private, with roles: owners (`ADMINS`) and superadmins (`SUPERADMINS`) are fixed by env; they add / remove
+  regular users in the Mini App (Settings → Boshqaruv → Foydalanuvchilar) by @username, from their contacts or from the
+  list of people who started the bot. Anyone else gets one short "private bot" reply, and the first time a stranger
+  writes, every owner and superadmin gets "👤 … botga kirmoqchi" with a "✅ Ruxsat berish" button. Owners never appear
+  in any list; each person keeps their own finance data
 - 🌐 Uzbek (Latin), Russian and English. The language is chosen on the first `/start` and can be changed in the
   Mini App (Settings → Til). Starter categories and one account, Cash (UZS), are created once, in the language picked
   first; the user adds their own cards in the Mini App
@@ -315,8 +319,9 @@ the server still runs but the bot shows no Mini App buttons (Telegram only opens
 
 **Security.** Every `/api/` request carries `Telegram.WebApp.initData` in the `X-Telegram-Init-Data` header. The server
 checks its HMAC-SHA256 signature with the bot token (secret = `HMAC_SHA256("WebAppData", BOT_TOKEN)`), refuses data
-older than 24 hours and takes the user id from it; only IDs in `ADMINS` get through (401 for missing / bad /
-expired data, 403 for anyone else). Every query is scoped to that user id, so another user's accounts, operations and
+older than 24 hours and takes the user id from it; only owners, superadmins and granted users get through (401 for
+missing / bad / expired data, 403 for anyone else). The users endpoints (`/api/users*`, `/api/visitors`) answer 403
+`not_manager` to regular users. Every query is scoped to that user id, so another user's accounts, operations and
 budgets answer 404. initData and the token are never logged. An admin who never chose a language gets 409 `start`.
 
 **API** (JSON; amounts are integers in minor units; every input is validated on the server, errors are
@@ -344,7 +349,8 @@ budgets answer 404. initData and the token are never logged. An admin who never 
 | Variable       | Description                                                              |
 |----------------|--------------------------------------------------------------------------|
 | `BOT_TOKEN`    | Token from [@BotFather](https://t.me/BotFather)                          |
-| `ADMINS`       | Comma-separated Telegram user IDs allowed to use the bot                 |
+| `ADMINS`       | Comma-separated Telegram user IDs of the owners (full access, manage users, hidden from lists) |
+| `SUPERADMINS`  | Optional comma-separated Telegram user IDs that use the bot and add / remove users in the Mini App |
 | `ip`           | Host IP address (optional, unused with long polling)                     |
 | `DATABASE_URL` | SQLAlchemy async URL, default `sqlite+aiosqlite:///./finora.db`          |
 | `AI_PROVIDER` | `gemini` (default) or `claude`; voice input needs `gemini` |
@@ -382,7 +388,8 @@ the Dockerfile builder, restart on failure and exactly 1 replica.
    | Variable | Meaning |
    |----------|---------|
    | `BOT_TOKEN` | Token from @BotFather (required) |
-   | `ADMINS` | Comma-separated Telegram user IDs allowed to use the bot (required) |
+   | `ADMINS` | Comma-separated Telegram user IDs of the owners (required) |
+   | `SUPERADMINS` | Optional comma-separated Telegram user IDs that may add / remove users in the Mini App |
    | `DATABASE_URL` | Optional. The image defaults to `sqlite+aiosqlite:////data/finance.db` (four slashes = absolute path) |
    | `AI_PROVIDER` | `gemini` (default) or `claude`; voice input needs `gemini` |
    | `GEMINI_API_KEY` | Google AI Studio key; with `gemini` an empty key disables AI input, Ask AI and advice |
@@ -453,16 +460,16 @@ The Mini App API is tested with aiohttp's test client and dummy-signed initData 
 ├── data/
 │   └── config.py          # Reads settings from .env
 ├── handlers/
-│   ├── users/             # start, help, legacy (hints for old commands / keyboard), ai_input (AI input), ask_ai, echo
+│   ├── users/             # start, help, access (grant button, shared contacts), legacy (hints for old commands / keyboard), ai_input (AI input), ask_ai, echo
 │   ├── groups/            # group chat handlers
 │   ├── channels/          # channel post handlers
 │   └── errors/            # global error handler
 ├── keyboards/
 │   └── inline/            # language picker and the Mini App (Web App) buttons
-├── middlewares/           # access (ADMINS only), language, throttling
+├── middlewares/           # access (owners / superadmins / granted users; records visitors), language, throttling
 ├── states/                # FSM states
 ├── filters/               # custom filters
-├── migrations/            # alembic migrations (0007: rate source)
+├── migrations/            # alembic migrations (0007: rate source, 0008: access grants and visitors)
 ├── webapp/                # Mini App page: index.html, app.css, app.js (no build step; Home, NewOp, History, Report, Settings, cards)
 ├── tests/                 # pytest suite (service layer, reports / alerts / charts, AI parsing with mocked Claude / Gemini clients)
 └── utils/

@@ -69,7 +69,7 @@ def test_init_data_without_hash_is_refused():
 
 @pytest.fixture
 async def client():
-    server = TestServer(create_app(TOKEN, {ADMIN}))
+    server = TestServer(create_app(TOKEN))
     async with TestClient(server) as test_client:
         yield test_client
 

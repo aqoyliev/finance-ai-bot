@@ -238,7 +238,7 @@ def test_migration_0006_creates_the_table_and_clears_manual_rates():
         assert conn.execute(sa.text("SELECT count(*) FROM users")).scalar() == 2  # only the rates were cleared
         columns = {c["name"] for c in sa.inspect(conn).get_columns("official_rates")}
         assert columns == {"currency", "rate", "rate_date", "source", "fetched_at"}
-        assert conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalar() == "0007"
+        assert conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalar() == "0008"
         command.downgrade(alembic_config(conn), "0005")
         assert "official_rates" not in sa.inspect(conn).get_table_names()
     engine.dispose()
@@ -396,7 +396,7 @@ def test_migration_0007_adds_source_defaulting_to_cbu():
                              "VALUES ('USD', '12850.37', '2026-11-05', '2026-11-05 00:00:00')"))
         command.upgrade(alembic_config(conn), "head")
         assert conn.execute(sa.text("SELECT source FROM official_rates")).scalar() == "cbu"
-        assert conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalar() == "0007"
+        assert conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalar() == "0008"
         conn.execute(sa.text("INSERT INTO official_rates (currency, rate, rate_date, fetched_at) "
                              "VALUES ('EUR', '14000', '2026-11-05', '2026-11-05 00:00:00')"))
         assert conn.execute(sa.text("SELECT source FROM official_rates WHERE currency = 'EUR'")).scalar() == "cbu"

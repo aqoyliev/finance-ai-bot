@@ -27,7 +27,7 @@ async def client(alerts):
     async def sender(user_id, lang, *saved):
         alerts.append((user_id, lang, saved))
 
-    async with TestClient(TestServer(create_app(TOKEN, {ADMIN}, alert_sender=sender))) as test_client:
+    async with TestClient(TestServer(create_app(TOKEN, alert_sender=sender))) as test_client:
         yield test_client
 
 

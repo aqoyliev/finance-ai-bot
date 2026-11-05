@@ -1,20 +1,22 @@
 """JSON API of the Mini App (webapp/) and the static files it needs.
 
 Every /api/ request must carry Telegram.WebApp.initData in the X-Telegram-Init-Data header; it is validated
-with the bot token (auth.py) and only users in ADMINS get through (the same rule as middlewares/access.py).
+with the bot token (auth.py) and only owners, superadmins and granted users get through (utils/db_api/access.py,
+the same rule as middlewares/access.py); request["role"] carries the caller's role.
 Amounts are integers in minor units (amount * 100), like in the database. This module has the auth middleware, the
 accounts (cards) endpoints and the app factory; the other screens are in screens.py.
 """
 import logging
 from pathlib import Path
-from typing import Iterable, Optional
+from typing import Optional
 
 from aiohttp import web
 
+from utils.db_api import access
 from utils.db_api import finance as db
 from utils.i18n import guess_language, webapp_texts
 
-from . import screens
+from . import screens, users
 from .auth import InitDataError, validate_init_data
 from .common import ApiError, account_json, minor, path_id, read_json, totals_json
 
@@ -26,8 +28,8 @@ RECENT_LIMIT = 10
 
 # Application keys (aiohttp 3.8, pinned by aiogram 2, has no web.AppKey)
 BOT_TOKEN = "miniapp_bot_token"
-ALLOWED_IDS = "miniapp_allowed_ids"
 ALERT_SENDER = screens.ALERT_SENDER
+BOT = users.BOT
 
 log = logging.getLogger(__name__)
 
@@ -59,11 +61,14 @@ async def auth_middleware(request: web.Request, handler):
     except InitDataError as err:
         log.info("Mini App request refused: %s", err)  # the reason only, never initData itself
         return refusal(request, 401, "auth", None)
-    user_id = fields["user_id"]
-    if user_id not in request.app[ALLOWED_IDS]:
-        log.info("Mini App request from %s refused: not in ADMINS", user_id)
-        return refusal(request, 403, "forbidden", fields["user"].get("language_code"))
+    user_id, tg_user = fields["user_id"], fields["user"]
+    role = await access.role_of(user_id, tg_user.get("username"),
+                                access.full_name(tg_user.get("first_name"), tg_user.get("last_name")))
+    if role is None:
+        log.info("Mini App request from %s refused: no access", user_id)
+        return refusal(request, 403, "forbidden", tg_user.get("language_code"))
     request["user_id"] = user_id
+    request["role"] = role
     request["language_code"] = fields["user"].get("language_code")
     try:
         return await handler(request)
@@ -183,12 +188,13 @@ async def health(request: web.Request) -> web.Response:
     return web.Response(text="ok")
 
 
-def create_app(bot_token: str, allowed_ids: Iterable[int], alert_sender=None) -> web.Application:
-    """alert_sender: async (user_id, lang, *saved) that sends limit alerts; default: the bot (notify_alerts)."""
+def create_app(bot_token: str, alert_sender=None, bot=None) -> web.Application:
+    """alert_sender: async (user_id, lang, *saved) that sends limit alerts; default: the bot (notify_alerts).
+    bot: the aiogram Bot that sends the access messages of the Users screen; default: the bot of loader.py."""
     app = web.Application(middlewares=[auth_middleware], client_max_size=64 * 1024)
     app[BOT_TOKEN] = bot_token
-    app[ALLOWED_IDS] = frozenset(allowed_ids)
     app[ALERT_SENDER] = alert_sender
+    app[BOT] = bot
     app.router.add_get("/", index)
     app.router.add_get("/healthz", health)
     app.router.add_get("/api/me", me)
@@ -198,6 +204,7 @@ def create_app(bot_token: str, allowed_ids: Iterable[int], alert_sender=None) ->
     app.router.add_put("/api/accounts/{account_id}", update_account)
     app.router.add_delete("/api/accounts/{account_id}", delete_account)
     screens.add_routes(app)
+    users.add_routes(app)
     app.router.add_static("/static/", WEBAPP_DIR)
     app.router.add_static("/fonts/", FONTS_DIR)
     return app

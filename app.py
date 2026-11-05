@@ -37,9 +37,10 @@ async def on_startup(dispatcher):
     # Weekly / monthly AI advice (also sends advice missed today while the bot was down)
     scheduler.start()
 
-    # Mini App: web server on PORT (always) and the chat menu button of every admin (when WEBAPP_URL is set)
-    await miniapp.start(config.BOT_TOKEN, config.ADMIN_IDS, config.WEBAPP_HOST, config.PORT)
-    await miniapp.set_menu_buttons(dispatcher.bot, config.ADMIN_IDS)
+    # Mini App: web server on PORT (always) and the chat menu button of every owner, superadmin and granted
+    # user (when WEBAPP_URL is set)
+    await miniapp.start(config.BOT_TOKEN, config.WEBAPP_HOST, config.PORT, bot=dispatcher.bot)
+    await miniapp.set_menu_buttons(dispatcher.bot)
 
 
 async def on_shutdown(dispatcher):
