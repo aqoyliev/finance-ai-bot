@@ -263,3 +263,13 @@ async def delete_operation(user_id: int, tx_id: int) -> List[Account]:
             _remember(touched, account)
             await session.delete(tx)
     return list(touched.values())
+
+
+async def update_details(user_id: int, tx_id: int, note: Optional[str], occurred_at: datetime) -> SavedOperation:
+    """Change the note and the time of an operation (both legs of a transfer). Balances do not change."""
+    async with session_factory() as session, session.begin():
+        rows = await _rows_to_change(session, user_id, tx_id)
+        for tx in rows:
+            tx.note = note
+            tx.occurred_at = occurred_at
+    return SavedOperation(rows[0].group_id, rows)

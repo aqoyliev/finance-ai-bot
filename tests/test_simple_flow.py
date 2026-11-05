@@ -1,4 +1,4 @@
-"""AI input without confirmation, the saved-operation card and the small reply-keyboard menu."""
+"""AI input without confirmation, the saved-operation card and the bot surface (/start, /help, hints to the Mini App)."""
 from datetime import datetime
 
 import pytest
@@ -123,14 +123,15 @@ async def test_resolved_account_is_saved_at_once_with_fallback_category(flow):
     drafts = [parser.Draft(kind="expense", amount_minor=1_800_000, currency="UZS", account_id=cash.id, note="cafe")]
     await ai_input.process(ai_input.Replier(msg, edit_first=True), state, "en", USER, drafts)
     [(text, markup)] = msg.sent
-    assert text.startswith("💸 <b>EXPENSE</b>") and "<b>Category:</b> Other" in text and markup.keyboard  # reply keyboard attached
+    assert text.startswith("💸 <b>EXPENSE</b>") and "<b>Category:</b> Other" in text
+    assert markup is None and not getattr(msg, "deleted", False)  # no reply keyboard: the status message is edited
     assert await balance(cash.id) == 100_000 - 1_800_000
     assert len(alerts) == 1 and await state.get_state() is None
     [view] = await db.recent_operations(USER)
     assert view.tx.source == "ai" and view.tx.category == "Other"
 
 
-async def test_missing_account_asked_once_for_all_and_applied(flow):
+async def test_missing_account_asked_once_for_all_and_applied(flow, webapp_on):
     ai_input, state, alerts = flow
     cash, card, credit, usd = await setup_user()
     msg = FakeMessage()
@@ -146,8 +147,11 @@ async def test_missing_account_asked_once_for_all_and_applied(flow):
     assert "could not find an amount" in texts[1]
     question, markup = msg.sent[2]
     assert question.startswith("💳 Which payment method?") and "25 000 UZS — Transport › Taxi" in question
-    buttons = [b.callback_data for row in markup.inline_keyboard for b in row]
-    assert buttons == [f"ai:acc:{a.id}" for a in await db.list_accounts(USER)] + ["ai:newacc"]  # last: add a card
+    assert t("ai_new_card_hint", "en") in question
+    buttons = [b.callback_data for row in markup.inline_keyboard[:-1] for b in row]
+    assert buttons == [f"ai:acc:{a.id}" for a in await db.list_accounts(USER)]
+    last = markup.inline_keyboard[-1][0]  # last: add a card in the Mini App
+    assert last.callback_data is None and last.web_app.url == "https://finance.example.com/#/new"
     assert await state.get_state() == "AIDraft:account"
 
     answer = FakeMessage()
@@ -192,49 +196,174 @@ async def test_typed_account_name_answers_the_question(flow, monkeypatch):
     assert await ai_input.typed_account(message, state, "en") is False
 
 
-# ---- Menu ----
+# ---- Bot surface: /start and /help only, the rest is in the Mini App ----
 
-def test_reply_keyboard_and_handler_order():
-    from keyboards.default.menu import main_keyboard
+@pytest.fixture
+def webapp_on(monkeypatch):
+    from data import config
+
+    monkeypatch.setattr(config, "WEBAPP_URL", "https://finance.example.com")
+    monkeypatch.setattr(config, "WEBAPP_ENABLED", True)
+
+
+def test_only_start_and_help_commands():
+    from utils.set_bot_commands import COMMANDS
+
+    assert COMMANDS == ("start", "help")
+    for name in COMMANDS:
+        assert all(t(f"cmd_{name}", lang) for lang in LANGUAGES)
+
+
+async def test_set_commands_deletes_stale_ones_for_every_language():
+    from types import SimpleNamespace
+
+    from utils.set_bot_commands import set_default_commands
+
+    calls = []
+
+    class FakeBot:
+        async def delete_my_commands(self, scope=None, language_code=None):
+            calls.append(("delete", language_code))
+
+        async def set_my_commands(self, commands, scope=None, language_code=None):
+            calls.append(("set", language_code, [c.command for c in commands]))
+
+    await set_default_commands(SimpleNamespace(bot=FakeBot()))
+    codes = [None] + list(LANGUAGES)
+    assert [c for c in calls if c[0] == "delete"] == [("delete", code) for code in codes]
+    assert [c for c in calls if c[0] == "set"] == [("set", code, ["start", "help"]) for code in codes]
+    assert calls.index(("delete", "en")) < calls.index(("set", None, ["start", "help"]))
+
+
+def test_handler_order_and_removed_modules():
+    import importlib
+
     from loader import dp
     import handlers  # noqa: F401  (registers everything in order)
 
-    for lang in LANGUAGES:
-        markup = main_keyboard(lang)
-        assert [b.text for b in markup.keyboard[0]] == [t("kb_report", lang), t("kb_balance", lang),
-                                                       t("kb_settings", lang)]
-        assert markup.resize_keyboard and markup.is_persistent
+    for gone in ("menu", "settings", "finance", "transfer", "accounts", "reports", "budgets", "operations", "advice"):
+        with pytest.raises(ModuleNotFoundError):
+            importlib.import_module(f"handlers.users.{gone}")
     names = [h.handler.__module__ + "." + h.handler.__name__ for h in dp.message_handlers.handlers]
-    menu_last = max(i for i, n in enumerate(names) if n.startswith("handlers.users.menu."))
-    for other in ("handlers.users.ai_input.text_input", "handlers.users.finance.typed_amount",
-                  "handlers.users.accounts.new_account_name", "handlers.users.echo.bot_fallback"):
-        assert names.index(other) > menu_last, other
-    # report, balance and settings: each has a button-text handler and a command handler
-    assert sum(h.handler.__module__ == "handlers.users.menu" for h in dp.message_handlers.handlers) == 6
+    legacy = names.index("handlers.users.legacy.moved_to_app")
+    assert legacy < names.index("handlers.users.ai_input.text_input") < names.index("handlers.users.echo.bot_fallback")
+    callbacks = [h.handler.__module__ + "." + h.handler.__name__ for h in dp.callback_query_handlers.handlers]
+    assert callbacks[-1] == "handlers.users.echo.stale_button"
+    assert "handlers.users.ai_input.choose_account" in callbacks
 
 
-def test_settings_keyboard_reaches_history():
-    from keyboards.inline import finance as kb
-
-    data = [b.callback_data for row in kb.settings("en").inline_keyboard for b in row]
-    assert data == ["menu:accounts", "bud:list", "menu:history", "set:advice", "set:lang"]
-
-
-def test_menu_words_match_in_any_language_case_and_emoji():
-    from keyboards.default.menu import is_menu_text, normalize
+def test_old_reply_keyboard_texts_are_recognized_exactly():
+    from handlers.users.legacy import OLD_COMMANDS, is_old_keyboard_text
 
     class Msg:
         def __init__(self, text):
             self.text = text
 
-    expected = {"kb_settings": ["Settings", "settings", "⚙️ Sozlamalar", "SOZLAMALAR", "настройки", "⚙ Настройки"],
-                "kb_report": ["report", "Hisobot", "📊 Hisobot", "отчет", "Отчёт", "📊 отчёт"],
-                "kb_balance": ["balance", "balans", "💳 Balans", "баланс", "БАЛАНС"]}
-    for key, texts in expected.items():
-        match = is_menu_text(key)
-        assert all(match(Msg(text)) for text in texts), key
-        assert not match(Msg("taxi 25000")) and not match(Msg(None)) and not match(Msg("settings 5"))
-    assert normalize("⚙️ Sozlamalar") == "sozlamalar" and normalize("📊 Отчёт") == "отчет"
+    for text in ("📊 Hisobot", "💳 Balans", "⚙️ Sozlamalar", "📊 Отчёт", "💳 Баланс", "⚙️ Настройки", "📊 Report",
+                 "💳 Balance", "⚙️ Settings"):
+        assert is_old_keyboard_text(Msg(text)), text
+    # plain words are no longer a menu: they go to the AI like any other text
+    for text in ("settings", "hisobot", "отчет", "taxi 25000", None):
+        assert not is_old_keyboard_text(Msg(text))
+    assert {"expense", "income", "transfer", "salaryday", "rate", "report", "balance", "settings"} == set(OLD_COMMANDS)
+
+
+class Chat(FakeMessage):
+    """A message that can be edited after it was sent (start text -> attach the app button)."""
+
+    def __init__(self, fail_edit=False):
+        super().__init__()
+        self.fail_edit = fail_edit
+        self.from_user = type("U", (), {"id": USER})()
+        self.edited = []
+
+    async def answer(self, text, reply_markup=None, **kwargs):
+        self.sent.append((text, reply_markup))
+        outer = self
+
+        class Sent:
+            async def edit_reply_markup(self, markup):
+                if outer.fail_edit:
+                    from aiogram.utils.exceptions import MessageCantBeEdited
+                    raise MessageCantBeEdited("Message can't be edited")
+                outer.edited.append(markup)
+
+        return Sent()
+
+
+async def test_start_removes_the_reply_keyboard_and_attaches_the_app_button(webapp_on):
+    from aiogram.types import ReplyKeyboardRemove
+
+    from handlers.users.start import send_start
+
+    msg = Chat()
+    await send_start(msg, "uz")
+    [(text, markup)] = msg.sent
+    assert text == t("start", "uz") and isinstance(markup, ReplyKeyboardRemove)
+    [app] = msg.edited
+    button = app.inline_keyboard[0][0]
+    assert button.text == "📱 Ilovani ochish" and button.web_app.url == "https://finance.example.com/"
+
+    refused = Chat(fail_edit=True)  # Telegram refused the edit: the button comes in a second message
+    await send_start(refused, "en")
+    assert len(refused.sent) == 2 and refused.sent[1][1].inline_keyboard[0][0].text == "📱 Open the app"
+
+
+async def test_start_without_mini_app_has_no_button(monkeypatch):
+    from data import config
+    from handlers.users.start import send_start
+
+    monkeypatch.setattr(config, "WEBAPP_ENABLED", False)
+    msg = Chat()
+    await send_start(msg, "ru")
+    assert len(msg.sent) == 1 and not msg.edited
+
+
+def test_start_and_help_texts_point_to_the_app():
+    for lang in LANGUAGES:
+        for key in ("start", "help", "moved_to_app"):
+            text = t(key, lang)
+            assert "📱" in text
+            for gone in ("/expense", "/income", "/transfer", "/salaryday", "/rate", "/report", "/balance",
+                         "/settings"):
+                assert gone not in text, (key, lang, gone)
+        assert len(t("help", lang)) > len(t("start", lang))
+
+
+async def test_old_command_and_stale_button_get_the_hint(webapp_on):
+    from handlers.users import echo, legacy
+
+    msg = Chat()
+    await legacy.moved_to_app(msg, "en")
+    [(text, markup)] = msg.sent
+    assert text == t("moved_to_app", "en") and markup.inline_keyboard[0][0].web_app is not None
+
+    answered = []
+
+    class Call:
+        message = Chat()
+
+        async def answer(self):
+            answered.append(True)
+
+    call = Call()
+    await echo.stale_button(call, "uz")
+    assert answered and call.message.sent[0][0] == t("moved_to_app", "uz")
+
+
+def test_advice_settings_button_opens_the_app(webapp_on):
+    from keyboards.inline import app as kb
+
+    markup = kb.open_app("en", kb.SETTINGS, "btn_advice_settings")
+    assert markup.inline_keyboard[0][0].web_app.url == "https://finance.example.com/#/settings"
+
+
+def test_app_buttons_need_an_https_url(monkeypatch):
+    from data import config
+    from keyboards.inline import app as kb
+
+    monkeypatch.setattr(config, "WEBAPP_ENABLED", False)
+    assert kb.open_app("uz") is None and kb.app_button("x", kb.NEW_CARD) is None
 
 
 def test_default_account_is_only_cash():
@@ -262,17 +391,6 @@ async def test_only_one_account_saves_without_asking(flow):
     assert await balance(cash.id) == -1_100_000
 
 
-async def test_saved_card_carries_the_reply_keyboard_even_over_a_status_message(flow):
-    ai_input, state, alerts = flow
-    cash, card, credit, usd = await setup_user()
-    msg = FakeMessage()
-    await ai_input.process(ai_input.Replier(msg, edit_first=True), state, "en", USER,
-                           [parser.Draft(kind="expense", amount_minor=100_000, currency="UZS", account_id=cash.id)])
-    [(text, markup)] = msg.sent
-    assert getattr(msg, "deleted", False)  # the reply keyboard cannot ride on an edited message
-    assert [b.text for b in markup.keyboard[0]] == [t(k, "en") for k in ("kb_report", "kb_balance", "kb_settings")]
-
-
 async def _pending(ai_input, state):
     cash, card, credit, usd = await setup_user()
     await ai_input.process(ai_input.Replier(FakeMessage(), edit_first=True), state, "en", USER,
@@ -283,17 +401,6 @@ async def _pending(ai_input, state):
 class Typed(FakeMessage):
     text = ""
     from_user = type("U", (), {"id": USER})()
-
-
-async def test_question_has_add_card_button_last(flow):
-    ai_input, state, alerts = flow
-    await _pending(ai_input, state)
-    message = Typed()
-    await ai_input.hint_account(message, state, "en")
-    [(text, markup)] = message.sent
-    assert text == t("ai_pick_account", "en")
-    assert markup.inline_keyboard[-1][0].callback_data == "ai:newacc"
-    assert markup.inline_keyboard[-1][0].text == t("btn_ai_new_account", "en")
 
 
 async def test_text_that_is_not_an_account_gets_a_hint_not_nothing_found(flow):
@@ -310,40 +417,44 @@ async def test_text_that_is_not_an_account_gets_a_hint_not_nothing_found(flow):
     assert await balance(cash.id) == 100_000
 
 
-async def test_card_added_from_the_question_receives_the_waiting_operation(flow):
+async def test_question_without_mini_app_has_account_buttons_only(flow, monkeypatch):
+    from data import config
+
+    monkeypatch.setattr(config, "WEBAPP_ENABLED", False)
     ai_input, state, alerts = flow
     await _pending(ai_input, state)
-    new = await db.create_account(USER, "My card", "debit", "UZS", opening_minor=500_000)
-    msg = FakeMessage()
-    await ai_input.finish_pending(msg, state, "en", USER, new)
-    assert msg.sent[0][0].startswith("💸") and "My card" in msg.sent[0][0]
+    message = Typed()
+    await ai_input.hint_account(message, state, "en")
+    [(text, markup)] = message.sent
+    assert text == t("ai_pick_account", "en")
+    assert all(b.callback_data.startswith("ai:acc:") for row in markup.inline_keyboard for b in row)
+
+
+async def test_question_has_add_card_button_last(flow, webapp_on):
+    ai_input, state, alerts = flow
+    await _pending(ai_input, state)
+    message = Typed()
+    await ai_input.hint_account(message, state, "en")
+    [(text, markup)] = message.sent
+    last = markup.inline_keyboard[-1][0]
+    assert last.text == t("btn_ai_new_account", "en") and last.web_app.url.endswith("#/new")
+
+
+async def test_card_added_in_the_app_then_typed_receives_the_waiting_operation(flow):
+    """The pending operation survives adding a card in the Mini App: typing the new card's name saves it."""
+    ai_input, state, alerts = flow
+    await _pending(ai_input, state)
+    new = await db.create_account(USER, "Kapital", "debit", "UZS", opening_minor=500_000, card_type="uzcard",
+                                  last4="4417")
+    message = Typed()
+    message.text = "kapital"
+    assert await ai_input.typed_account(message, state, "en") is True
+    assert message.sent[0][0].startswith("💸") and "Kapital" in message.sent[0][0]
     assert await balance(new.id) == 400_000 and await state.get_state() is None and len(alerts) == 1
 
 
-async def test_card_in_another_currency_asks_again(flow):
-    ai_input, state, alerts = flow
-    cash, card, credit, usd = await setup_user()
-    await db.create_account(USER, "Second USD", "cash", "USD", opening_minor=0)  # two USD accounts: asked
-    await ai_input.process(ai_input.Replier(FakeMessage(), edit_first=True), state, "en", USER,
-                           [parser.Draft(kind="expense", amount_minor=100, currency="USD", category="Health")])
-    new = await db.create_account(USER, "New UZS", "debit", "UZS", opening_minor=0)
-    msg = FakeMessage()
-    await ai_input.finish_pending(msg, state, "en", USER, new)
-    [(text, markup)] = msg.sent
-    assert text.startswith("💳") and markup is not None and await state.get_state() == "AIDraft:account"
-
-
-async def test_nothing_found_reply_carries_the_reply_keyboard(flow):
+async def test_nothing_found_reply_has_no_keyboard(flow):
     ai_input, state, alerts = flow
     msg = FakeMessage()
-    await ai_input.Replier(msg, edit_first=True)(t("ai_nothing_found", "uz"), menu_lang="uz")
-    [(text, markup)] = msg.sent
-    assert text == t("ai_nothing_found", "uz") and markup.keyboard[0][2].text == t("kb_settings", "uz")
-
-
-def test_new_commands_are_listed():
-    from utils.set_bot_commands import COMMANDS
-
-    assert {"report", "balance", "settings"} <= set(COMMANDS)
-    for name in COMMANDS:
-        assert all(t(f"cmd_{name}", lang) for lang in LANGUAGES)
+    await ai_input.Replier(msg, edit_first=True)(t("ai_nothing_found", "uz"))
+    assert msg.sent == [(t("ai_nothing_found", "uz"), None)]

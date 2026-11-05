@@ -5,13 +5,13 @@ from .accounts import (CARD_TYPES, CurrencyLocked, Last4Taken, available_credit,
 from .alerts import Alert, check_alerts  # noqa: F401
 from .budgets import (budget_usages, get_budget, list_budgets, remove_budget,  # noqa: F401
                       set_budget)
-from .categories import (fallback_category, get_category, get_subcategory, list_categories,  # noqa: F401
+from .categories import (category_tree, fallback_category, get_category, get_subcategory, list_categories,  # noqa: F401
                          list_subcategories)
 from .common import (ACCOUNT_KINDS, CURRENCIES, OPERATION_KINDS, TZ, AccountNotFound,  # noqa: F401
                      CurrencyMismatch, FinanceError, InvalidValue, OperationNotFound, SameAccount, now)
 from .operations import (Leg, OperationView, SavedOperation, delete_operation, find_similar,  # noqa: F401
                          get_operation, record_operation, record_transfer, recent_operations,
-                         update_account, update_amount, update_category)
+                         update_account, update_amount, update_category, update_details)
 from .insights import (AccountActivity, ExpenseRow, RangeSummary, SearchResult, TxRow,  # noqa: F401
                        account_activity, expense_rows, has_operations, largest_expenses, range_summary,
                        search_transactions)

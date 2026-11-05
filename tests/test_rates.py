@@ -7,19 +7,16 @@ import tempfile
 from datetime import date, timedelta
 from decimal import Decimal
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 import sqlalchemy as sa
 from aiohttp import web
 from aiohttp.test_utils import TestServer
 
-from handlers.users import settings
 from utils import rates
 from utils.ai import assistant, tools
 from utils.db_api import finance as db
 from utils.db_api.base import alembic_config
-from utils.i18n import LANGUAGES, t
 
 from test_services import USER, setup_user
 
@@ -193,79 +190,6 @@ async def test_budgets_and_report_convert_by_default(monkeypatch):
     assert usage.spent == 100_000 + 12_500_000  # $10.00 at 12 500 (minor units)
     report = await db.build_period_report(USER, 0)
     assert report.combined.rate == Decimal("12500") and report.combined.expense == 100_000 + 12_500_000
-
-
-# ---- /rate command ----
-
-class Msg:
-    def __init__(self, args=""):
-        self._args, self.sent = args, []
-        self.from_user = SimpleNamespace(id=USER)
-
-    def get_args(self):
-        return self._args
-
-    async def answer(self, text, **kwargs):
-        self.sent.append(text)
-
-
-async def rate(args, lang="en"):
-    msg = Msg(args)
-    await settings.rate_command(msg, lang)
-    [text] = msg.sent
-    return text
-
-
-async def test_rate_command_shows_official_then_manual(monkeypatch):
-    await setup_user()
-    mock_fetch(monkeypatch, OFFICIAL)
-    assert "1 USD = 12850.37 UZS (Central Bank, 05.11.2026)" in await rate("")
-    assert "Markaziy bank, 05.11.2026" in await rate("", "uz")
-    assert "Центральный банк, 05.11.2026" in await rate("", "ru")
-
-    assert "Rate saved: 1 USD = 12650 UZS" in await rate("1 USD 12650 UZS")
-    assert "1 USD = 12650 UZS (manual)" in await rate("")
-    assert "qo'lda" in await rate("", "uz") and "вручную" in await rate("", "ru")
-
-
-@pytest.mark.parametrize("word", ["auto", "AUTO", "avto", "Avto", "авто", "Авто"])
-async def test_rate_auto_removes_the_override(monkeypatch, word):
-    await setup_user()
-    mock_fetch(monkeypatch, OFFICIAL)
-    await rate("1 USD 12650 UZS")
-    assert "Central Bank rate is used again" in await rate(word)
-    assert (await db.get_usd_rate_info(USER)).source == "cbu"
-    assert "no own rate" in await rate(word)  # nothing left to remove
-
-
-async def test_rate_command_set_variants_and_errors(monkeypatch):
-    await setup_user()
-    mock_fetch(monkeypatch, OFFICIAL)
-    assert "12650.5" in await rate("1 usd 12650,5 uzs")
-    assert await db.get_usd_rate(USER) == Decimal("12650.5")
-    for bad in ("12650", "1 USD 12650", "1 EUR 12650 UZS", "5 USD 12650 UZS", "1 USD 12650 UZS extra", "auto now"):
-        assert "Format: /rate 1 USD" in await rate(bad)
-    for bad in ("1 USD abc UZS", "1 USD 0 UZS", "1 USD -5 UZS", "1 USD NaN UZS"):
-        assert "positive number" in await rate(bad)
-    assert await db.get_usd_rate(USER) == Decimal("12650.5")  # failed commands changed nothing
-
-
-async def test_rate_command_when_cbu_is_unreachable(monkeypatch):
-    await setup_user()
-    mock_fetch(monkeypatch, OSError("down"))
-    text = await rate("")
-    assert "could not be fetched" in text and "Central Bank" not in text
-    for lang in ("uz", "ru"):
-        assert "Markaziy" not in await rate("", lang) and "Центро" not in await rate("", lang)
-
-
-def test_rate_texts_exist_in_all_languages_and_mention_auto():
-    for lang in LANGUAGES:
-        for key in ("cmd_rate", "rate_usage", "rate_current", "rate_unknown", "rate_auto", "rate_auto_none",
-                    "rate_source_manual", "rate_hint", "help", "settings"):
-            text = t(key, lang, rate="1", source="s", salary_day=1, date="d")
-            assert text and "12700" not in text
-        assert "/rate auto" in t("help", lang) and "/rate auto" in t("settings", lang, salary_day=1)
 
 
 # ---- The AI gets the real rate ----
@@ -448,13 +372,9 @@ async def test_real_http_fetch_sends_user_agent_and_fallback_parsers(monkeypatch
     assert seen == ["finance-ai-bot", "finance-ai-bot"]
 
 
-async def test_source_labels_in_rate_command_ai_context_and_tool(monkeypatch):
+async def test_source_labels_in_ai_context_and_tool(monkeypatch):
     await setup_user()
     mock_fetch(monkeypatch, MARKET)
-    assert "1 USD = 11910.62 UZS (international market rate, 04.11.2026)" in await rate("")
-    assert "xalqaro bozor kursi, 04.11.2026" in await rate("", "uz")
-    assert "международный рыночный курс, 04.11.2026" in await rate("", "ru")
-    assert "Central Bank, " not in await rate("")
     info = await db.get_usd_rate_info(USER)
     assert info.source == "market" and info.day == date(2026, 11, 4)
     assert "international market rate, not the Central Bank, 04.11.2026" in assistant.context_line(
@@ -462,8 +382,6 @@ async def test_source_labels_in_rate_command_ai_context_and_tool(monkeypatch):
     result = await tools.get_exchange_rate(USER)
     assert result == {"usd_to_uzs": "11910.62", "source": "international market rate (not the Central Bank)",
                       "date": "2026-11-04"}
-    for lang in LANGUAGES:
-        assert "{" not in t("rate_source_market", lang, date="d") and "d" in t("rate_source_market", lang, date="d")
 
 
 def test_migration_0007_adds_source_defaulting_to_cbu():

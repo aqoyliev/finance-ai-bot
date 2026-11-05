@@ -263,18 +263,3 @@ async def test_load_context_carries_last4():
     account = await db.create_account(ADMIN, "Kapitalbank", "debit", "UZS", card_type="humo", last4="4417")
     ctx = await load_context(ADMIN)
     assert match_account(ctx, card_last4="*4417").id == account.id
-
-
-# ---- Bot button ----
-
-def test_accounts_keyboard_has_mini_app_button_only_with_https_url(monkeypatch):
-    from data import config
-    from keyboards.inline.accounts import account_list
-
-    monkeypatch.setattr(config, "WEBAPP_ENABLED", False)
-    assert all(b.web_app is None for row in account_list([], "uz").inline_keyboard for b in row)
-
-    monkeypatch.setattr(config, "WEBAPP_URL", "https://finance.example.com")
-    monkeypatch.setattr(config, "WEBAPP_ENABLED", True)
-    first = account_list([], "uz").inline_keyboard[0][0]
-    assert first.web_app.url == "https://finance.example.com" and first.text == "💳 Kartalarim (Mini App)"

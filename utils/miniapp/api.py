@@ -2,21 +2,21 @@
 
 Every /api/ request must carry Telegram.WebApp.initData in the X-Telegram-Init-Data header; it is validated
 with the bot token (auth.py) and only users in ADMINS get through (the same rule as middlewares/access.py).
-Amounts are integers in minor units (amount * 100), like in the database.
+Amounts are integers in minor units (amount * 100), like in the database. This module has the auth middleware, the
+accounts (cards) endpoints and the app factory; the other screens are in screens.py.
 """
 import logging
-from datetime import date
 from pathlib import Path
 from typing import Iterable, Optional
 
 from aiohttp import web
 
 from utils.db_api import finance as db
-from utils.db_api.accounts import MAX_BALANCE_MINOR
-from utils.db_api.models import Account
 from utils.i18n import guess_language, webapp_texts
 
+from . import screens
 from .auth import InitDataError, validate_init_data
+from .common import ApiError, account_json, minor, path_id, read_json, totals_json
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 WEBAPP_DIR = ROOT_DIR / "webapp"
@@ -27,20 +27,17 @@ RECENT_LIMIT = 10
 # Application keys (aiohttp 3.8, pinned by aiogram 2, has no web.AppKey)
 BOT_TOKEN = "miniapp_bot_token"
 ALLOWED_IDS = "miniapp_allowed_ids"
+ALERT_SENDER = screens.ALERT_SENDER
 
 log = logging.getLogger(__name__)
 
-
-class ApiError(Exception):
-    def __init__(self, status: int, code: str):
-        super().__init__(code)
-        self.status, self.code = status, code
-
-
 ERRORS = {  # domain error -> (HTTP status, code shown by the app)
     db.AccountNotFound: (404, "not_found"),
+    db.OperationNotFound: (404, "not_found"),
     db.Last4Taken: (409, "last4_taken"),
     db.CurrencyLocked: (409, "currency_locked"),
+    db.CurrencyMismatch: (409, "currency_mismatch"),
+    db.SameAccount: (400, "same_account"),
     db.InvalidValue: (400, "invalid"),
 }
 
@@ -79,35 +76,6 @@ async def auth_middleware(request: web.Request, handler):
 
 # ---- Serialization ----
 
-def card_type_of(account: Account) -> Optional[str]:
-    """The saved card type; accounts added in the chat have none (cash ones count as "cash")."""
-    return account.card_type or ("cash" if account.kind == "cash" else None)
-
-
-def account_json(account: Account) -> dict:
-    credit = account.kind == "credit"
-    return {
-        "id": account.id,
-        "name": account.name,
-        "kind": account.kind,
-        "card_type": card_type_of(account),
-        "last4": account.last4,
-        "currency": account.currency,
-        "is_credit": credit,
-        "balance_minor": account.balance_minor,
-        "debt_minor": db.debt(account) if credit else 0,
-        "credit_limit_minor": account.credit_limit_minor if credit else 0,
-        "available_minor": db.available_credit(account) if credit else None,
-    }
-
-
-def totals_json(accounts: Iterable[Account]) -> dict:
-    totals = {currency: 0 for currency in db.CURRENCIES}
-    for account in accounts:
-        totals[account.currency] += account.balance_minor
-    return totals
-
-
 def operation_json(tx) -> dict:
     return {
         "id": tx.id,
@@ -122,28 +90,14 @@ def operation_json(tx) -> dict:
 
 
 def account_id_of(request: web.Request) -> int:
-    try:
-        return int(request.match_info["account_id"])
-    except ValueError:
-        raise ApiError(404, "not_found") from None
+    return path_id(request, "account_id")
 
 
 # ---- Input ----
 
-def _minor(value, code: str) -> int:
-    if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= MAX_BALANCE_MINOR:
-        raise ApiError(400, code)
-    return value
-
-
 async def read_form(request: web.Request) -> dict:
     """Validated account fields from the JSON body of a create / update request."""
-    try:
-        data = await request.json()
-    except ValueError:
-        raise ApiError(400, "invalid") from None
-    if not isinstance(data, dict):
-        raise ApiError(400, "invalid")
+    data = await read_json(request)
     card_type = data.get("card_type")
     if card_type not in db.CARD_TYPES:
         raise ApiError(400, "invalid")
@@ -157,8 +111,8 @@ async def read_form(request: web.Request) -> dict:
     if currency not in db.CURRENCIES:
         raise ApiError(400, "invalid")
     credit = data.get("is_credit") is True and card_type != "cash"
-    balance = _minor(data.get("balance_minor"), "amount")  # credit: the current debt
-    limit = _minor(data.get("credit_limit_minor") or 0, "amount") if credit else 0
+    balance = minor(data.get("balance_minor"), "amount")  # credit: the current debt
+    limit = minor(data.get("credit_limit_minor") or 0, "amount") if credit else 0
     return {
         "name": name, "card_type": card_type, "last4": last4 or None, "currency": currency,
         "kind": "cash" if card_type == "cash" else ("credit" if credit else "debit"),
@@ -170,8 +124,11 @@ async def read_form(request: web.Request) -> dict:
 # ---- Handlers ----
 
 async def me(request: web.Request) -> web.Response:
+    """Language and texts of the app, plus whether AI is configured (the report's advice box needs it)."""
+    from utils.ai import core as ai
+
     lang = await db.get_language(request["user_id"]) or guess_language(request["language_code"])
-    return web.json_response({"lang": lang, "texts": webapp_texts(lang)})
+    return web.json_response({"lang": lang, "texts": webapp_texts(lang), "ai": bool(ai.get_client().configured)})
 
 
 async def list_accounts(request: web.Request) -> web.Response:
@@ -226,10 +183,12 @@ async def health(request: web.Request) -> web.Response:
     return web.Response(text="ok")
 
 
-def create_app(bot_token: str, allowed_ids: Iterable[int]) -> web.Application:
+def create_app(bot_token: str, allowed_ids: Iterable[int], alert_sender=None) -> web.Application:
+    """alert_sender: async (user_id, lang, *saved) that sends limit alerts; default: the bot (notify_alerts)."""
     app = web.Application(middlewares=[auth_middleware], client_max_size=64 * 1024)
     app[BOT_TOKEN] = bot_token
     app[ALLOWED_IDS] = frozenset(allowed_ids)
+    app[ALERT_SENDER] = alert_sender
     app.router.add_get("/", index)
     app.router.add_get("/healthz", health)
     app.router.add_get("/api/me", me)
@@ -238,6 +197,7 @@ def create_app(bot_token: str, allowed_ids: Iterable[int]) -> web.Application:
     app.router.add_get("/api/accounts/{account_id}", get_account)
     app.router.add_put("/api/accounts/{account_id}", update_account)
     app.router.add_delete("/api/accounts/{account_id}", delete_account)
+    screens.add_routes(app)
     app.router.add_static("/static/", WEBAPP_DIR)
     app.router.add_static("/fonts/", FONTS_DIR)
     return app

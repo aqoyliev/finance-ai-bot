@@ -42,7 +42,7 @@ async def stop() -> None:
 
 
 async def set_menu_buttons(bot: Bot, allowed_ids: Iterable[int]) -> None:
-    """The chat menu button of every admin opens the Mini App (or is reset when WEBAPP_URL is not set)."""
+    """The chat menu button of every admin opens the Mini App's Home (or is reset when WEBAPP_URL is not set)."""
     if config.WEBAPP_URL and not config.WEBAPP_ENABLED:
         log.warning("WEBAPP_URL must start with https:// for Telegram; Mini App buttons are off")
     for user_id in allowed_ids:

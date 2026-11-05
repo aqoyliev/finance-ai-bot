@@ -2,7 +2,7 @@ from aiogram import types
 from aiogram.dispatcher.handler import CancelHandler
 from aiogram.dispatcher.middlewares import BaseMiddleware
 
-from keyboards.inline.finance import languages
+from keyboards.inline.app import languages
 from utils.db_api import finance as db
 from utils.i18n import guess_language, t
 

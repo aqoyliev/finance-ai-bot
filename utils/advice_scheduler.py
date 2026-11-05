@@ -24,7 +24,7 @@ from typing import Dict, List, Optional, Tuple
 from aiogram import types
 from aiogram.utils.exceptions import TelegramAPIError
 
-from keyboards.inline import ai as ai_kb
+from keyboards.inline import app as app_kb
 from loader import bot
 from utils import cards
 from utils.ai import assistant
@@ -100,7 +100,7 @@ class AdviceScheduler:
             card = await cards.advice_card(user.id, kind, user.language, today=day)
             await send_advice(user.id, advice_message(result, kind, user.language),
                               advice_header(result, kind, user.language), card,
-                              ai_kb.after_advice(user.language, settings=True))
+                              app_kb.open_app(user.language, app_kb.SETTINGS, "btn_advice_settings"))
         await db.mark_advice_sent(user.id, kind, day)
         return result is not None
 

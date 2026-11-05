@@ -188,10 +188,6 @@ async def test_subcategory_breakdown():
     await expense(cash, 44_000, "Transport", "Taxi", at(2, 9))  # previous period
     by_currency = await db.expense_by_subcategory(USER, "Transport", date(2026, 3, 5), date(2026, 4, 5))
     assert by_currency == {"UZS": [("Taxi", 50_000), ("Fuel", 10_000), (rep.NO_CATEGORY, 5_000)]}
-    report = await db.build_period_report(USER, 0, today=TODAY)
-    for lang in LANGUAGES:
-        text = texts.subcategory_text(report, "Transport", by_currency, lang)
-        assert "Taxi" in text and "500.00 UZS" in text
 
 
 # ---- Budgets ----
@@ -354,34 +350,7 @@ async def test_send_alerts_never_raises(monkeypatch):
     await notify_alerts.send_alerts(USER, "en", await expense(cash, 1_000, "Transport"))
 
 
-# ---- Text rendering ----
-
-async def test_report_text_all_languages():
-    cash, card, credit, usd, _ = await seed_period_data()
-    await db.set_usd_rate(USER, Decimal("12500"))
-    await db.set_budget(USER, "Transport", "UZS", 400_000)
-    await expense(cash, 300_000, "Transport", "Taxi", at(3, 8))
-    await expense(cash, 100_000, "Transport", "Taxi", at(2, 8))
-    await expense(usd, 2_000, "Health", None, at(3, 9), "USD")
-    report = await db.build_period_report(USER, 0, today=TODAY)
-    for lang in LANGUAGES:
-        text = texts.report_text(report, lang)
-        assert "3 000.00 UZS" in text and "75%" in text and "▲ 200%" in text  # 300k vs 100k
-        assert "USD" in text and "▓" in text and "UZS" in text
-        assert "12500" in text  # combined total is labeled with the rate
-        assert "05.03.2026" in text
-    past = await db.build_period_report(USER, -1, today=TODAY)
-    assert "05.02.2026" in texts.report_text(past, "en") and "04.03.2026" in texts.report_text(past, "en")
-
-
-async def test_empty_report_and_html_escape():
-    cash, *_ = await seed_period_data()
-    empty = await db.build_period_report(USER, 0, today=TODAY)
-    assert "No income or expenses" in texts.report_text(empty, "en")
-    await expense(cash, 1_000, "<b>x</b>", None, at(3, 8))
-    text = texts.report_text(await db.build_period_report(USER, 0, today=TODAY), "en")
-    assert "&lt;b&gt;x&lt;/b&gt;" in text
-
+# ---- Alert text ----
 
 def test_progress_bar_and_alert_text():
     assert texts.progress_bar(0) == "░" * 10

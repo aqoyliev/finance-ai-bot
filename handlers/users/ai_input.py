@@ -10,14 +10,13 @@ The same SMS / photo / file sent again is not saved twice (source_ref); the same
 minutes apart is saved with a warning. Budget and credit limit alerts follow the save confirmations.
 
 The extraction model also classifies free text: a question about the user's finances is handed to Ask AI
-(handlers/users/ask_ai.py) instead. Photos and files always go to extraction. Manual flows are unaffected:
-their FSM states are handled by their own handlers, and this module only reacts when no state (or
-AIDraft.account) is set. It is registered after the reply-keyboard handlers and before handlers/users/echo.
+(handlers/users/ask_ai.py) instead. Photos and files always go to extraction. This module only reacts when no
+state (or AIDraft.account) is set. It is registered after start / help / legacy and before handlers/users/echo.
+Manual entry, history, reports and settings live in the Mini App (webapp/, utils/miniapp/).
 
 Voice messages and audio files need audio input, which only the Gemini provider has: the audio is transcribed
 and extracted in one call. With AI_PROVIDER=claude they get a localized hint.
 """
-import contextlib
 import logging
 import re
 from html import escape
@@ -27,12 +26,10 @@ from aiogram import types
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters import Text
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-from aiogram.utils.exceptions import TelegramAPIError
 
-from keyboards.default.menu import main_keyboard
-from keyboards.inline import finance as fin_kb
+from keyboards.inline import app as app_kb
 from loader import bot, dp
-from states.finance import AccountForm, AIDraft
+from states.finance import AIDraft
 from utils.ai import core as ai
 from utils.ai import parser
 from utils.ai.parser import Draft
@@ -62,20 +59,12 @@ class Replier:
         self.message = message
         self.edit_next = edit_first
 
-    async def __call__(self, text: str, markup: Optional[InlineKeyboardMarkup] = None,
-                       menu_lang: Optional[str] = None) -> None:
-        """menu_lang: attach the reply keyboard (when there is no inline markup). A reply keyboard cannot ride on
-        an edited message, so the status message is then replaced by a new one."""
-        keyboard = main_keyboard(menu_lang) if menu_lang and markup is None else None
-        if self.edit_next and keyboard is None:
+    async def __call__(self, text: str, markup: Optional[InlineKeyboardMarkup] = None) -> None:
+        if self.edit_next:
             self.edit_next = False
             await self.message.edit_text(text, reply_markup=markup)
             return
-        if self.edit_next:
-            self.edit_next = False
-            with contextlib.suppress(TelegramAPIError):
-                await self.message.delete()
-        await self.message.answer(text, reply_markup=markup or keyboard)
+        await self.message.answer(text, reply_markup=markup)
 
 
 # ---- Input: analysis ----
@@ -109,7 +98,7 @@ async def analyze(message: types.Message, state: FSMContext, lang: str, text: Op
             source_ref = None  # typed text may honestly repeat ("coffee 18000" every day); an SMS may not
     drafts = parser.parse_response(raw, ctx, now, source_ref)
     if not drafts:
-        await Replier(status, edit_first=True)(t("ai_nothing_found", lang), menu_lang=lang)
+        await Replier(status, edit_first=True)(t("ai_nothing_found", lang))
         return
     await state.finish()
     await process(Replier(status, edit_first=True), state, lang, user_id, drafts)
@@ -157,7 +146,7 @@ async def save_drafts(reply: Replier, lang: str, user_id: int, drafts: List[Draf
         parts = [operation_card(saved, lang)] + over_limit_warning(saved.over_limit, lang)
         if duplicate == "similar":
             parts.append(t("ai_duplicate", lang))
-        await reply("\n\n".join(parts), menu_lang=lang)
+        await reply("\n\n".join(parts))
         saved_ops.append(saved)
     return saved_ops
 
@@ -174,8 +163,12 @@ def pending_line(draft: Draft, lang: str) -> str:
 
 
 def account_markup(accounts, lang: str) -> InlineKeyboardMarkup:
+    """One button per account; the last one opens the Mini App's "new card" form (when the Mini App is on).
+    The waiting operations stay in FSM data: after adding the card, typing its name answers the question."""
     rows = [[InlineKeyboardButton(f"{a.name} ({a.currency})", callback_data=f"ai:acc:{a.id}")] for a in accounts]
-    rows.append([InlineKeyboardButton(t("btn_ai_new_account", lang), callback_data="ai:newacc")])
+    new_card = app_kb.app_button(t("btn_ai_new_account", lang, _escape=False), app_kb.NEW_CARD)
+    if new_card:
+        rows.append([new_card])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -199,6 +192,8 @@ async def ask_account(reply: Replier, state: FSMContext, lang: str, user_id: int
         return
     await state.set_state(AIDraft.account)
     lines = [t("ai_ask_account", lang)] + [escape(pending_line(d, lang), quote=False) for d in drafts]
+    if app_kb.app_button("-") is not None:
+        lines += ["", t("ai_new_card_hint", lang)]
     await reply("\n".join(lines), account_markup(accounts, lang))
 
 
@@ -232,26 +227,6 @@ async def choose_account(call: types.CallbackQuery, state: FSMContext, lang: str
         await call.message.edit_text(t("session_lost", lang))
         return
     await apply_account(Replier(call.message, edit_first=True), state, lang, call.from_user.id, account)
-
-
-@dp.callback_query_handler(Text(equals="ai:newacc"), state=AIDraft.account)
-async def new_account(call: types.CallbackQuery, state: FSMContext, lang: str):
-    """Add a card while operations wait: the pending drafts stay in FSM data and go to the new account."""
-    await call.answer()
-    await AccountForm.name.set()  # does not clear the FSM data
-    await call.message.edit_text(t("ask_account_name", lang), reply_markup=fin_kb.amount_prompt(lang, quick=False))
-
-
-async def finish_pending(message: types.Message, state: FSMContext, lang: str, user_id: int, account) -> None:
-    """After a card was created from the account question: save the waiting operations to it, or ask again."""
-    drafts = [Draft.from_dict(d) for d in (await state.get_data()).get(PENDING_KEY) or []]
-    if not drafts:
-        await state.finish()
-        return
-    if all(not d.currency or d.currency == account.currency for d in drafts):
-        await apply_account(Replier(message, edit_first=False), state, lang, user_id, account)
-    else:  # e.g. a USD amount and a new UZS card: ask again, the new card is among the buttons
-        await ask_account(Replier(message, edit_first=False), state, lang, user_id, drafts)
 
 
 async def hint_account(message: types.Message, state: FSMContext, lang: str) -> None:

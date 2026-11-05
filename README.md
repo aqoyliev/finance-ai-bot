@@ -24,59 +24,49 @@ A private personal-finance bot for a single owner, built on this template.
 
 ### Features
 
+The chat is for input and questions; everything else lives in the 📱 Mini App.
+
 - 🔐 Private: only Telegram IDs listed in `ADMINS` can use it; anyone else gets one short "private bot" reply
-- 🌐 Uzbek (Latin), Russian and English. The language is chosen on the first `/start` and can be changed in
-  Settings. Starter categories and one account, Cash (UZS), are created once, in the language picked first; the
-  user adds their own cards in ⚙️ Settings → Accounts
-- ✍️ Operations are added by typing or speaking (see AI input below) and saved at once; `/expense`, `/income` and
-  `/transfer` remain for manual entry (a purchase can be split across several accounts there)
-- ⌨️ A small reply keyboard instead of a menu: 📊 Report, 💳 Balance, ⚙️ Settings (accounts, budgets, history,
-  AI advice, language); it is shown after the language choice and on every `/start`, and also attached to the
-  "no operation found" reply and to saved-operation cards, so users who never re-ran `/start` get it. The buttons
-  also work as plain words in any language, any case, with or without the emoji (`settings`, `sozlamalar`,
-  `настройки`, `report`, `hisobot`, `отчет`, `balance`, `balans`, `баланс`), and `/settings`, `/report` and
-  `/balance` open the same screens
-- 🧾 Every saved operation is confirmed with a short card (see below)
-- 💳 Accounts (cash, debit, credit; UZS or USD): add, rename, change the opening balance or credit limit,
-  deactivate (soft delete, history is kept). Credit cards show debt, limit and available credit
-- 📱 A Telegram Mini App for the cards (see Mini App below): balances, add / edit / delete, the month's totals and the
-  last operations of a card
+- 🌐 Uzbek (Latin), Russian and English. The language is chosen on the first `/start` and can be changed in the
+  Mini App (Settings → Til). Starter categories and one account, Cash (UZS), are created once, in the language picked
+  first; the user adds their own cards in the Mini App
+- 💬 **Chat:** only `/start` and `/help`. Type or say an operation, send a receipt photo or a bank SMS (see AI input
+  below): it is saved at once and confirmed with a short card. Questions about your data are answered by Ask AI.
+  Weekly / monthly AI advice and limit alerts arrive in the chat
+- 📱 **Mini App** (see below): Home (balance, the month's expense and income, monthly limit, cards, last operations),
+  ➕ new operation (expense, income, transfer; edit and delete from History), History (search, filters, by day),
+  Report (week / month / year, categories, change vs the previous period, AI advice) and Settings (cards, salary day,
+  USD rate, monthly limits, AI advice switches, language)
+- 💳 Accounts (cash, debit, credit; UZS or USD) with the card type and the last 4 digits; credit cards show debt, limit
+  and available credit; deleting an account with operations archives it (history kept)
 - 🔁 Transfers between own accounts of the same currency; a transfer to a credit card repays its debt.
   Transfers are never counted as income or expense
 - ⚠️ Warning when an expense pushes a credit card's debt above its limit
-- 🧾 History (⚙️ Settings → 🧾 History): open a recent operation to change its amount, category or account, or
-  delete it (balances are recalculated; deleting a transfer removes both legs)
-- 📊 Report for the financial month (it starts on the salary day, `/salaryday 5`): income, expenses and balance per
-  currency, expenses by category with share and change versus the previous period, a donut chart (see below)
+- 📊 Reports per financial month (it starts on the salary day), week or calendar year
 - 🎯 Monthly budgets per expense category and 🔔 alerts at 80% / 100% of a budget or of a credit card limit
 - 🤖 AI input: record operations from free text, a voice message, a receipt photo or a forwarded bank SMS,
   without confirmation (see below)
 - 💬 Ask AI: type a question about your own data in plain language; plus 📅 weekly and 📆 monthly AI advice
 
-All texts live in `utils/i18n.py`; operations are written through `record_operation` / `record_transfer`
-in `utils/db_api/operations.py`.
+All texts live in `utils/i18n.py` (`TEXTS` for the chat, `WEBAPP_TEXTS` for the Mini App); operations are written
+through `record_operation` / `record_transfer` in `utils/db_api/operations.py`, from AI input and from the Mini App alike.
 
-### Category report and chart
+### Bot surface
 
-📊 Report (reply keyboard) shows the current financial period as a chart (photo) with the text summary as its caption; when the text
-does not fit Telegram's 1024-character caption limit it is sent as a separate message right after the photo.
+| Input | Answer |
+|-------|--------|
+| `/start` | Language picker on the first contact; afterwards a short "what to do" text (type, say or send a receipt / SMS; everything else is in the app) with an inline **📱 Ilovani ochish** Web App button (when `WEBAPP_URL` is https). The message is sent with `ReplyKeyboardRemove`, so chats that still show the old 📊 / 💳 / ⚙️ keyboard lose it; the button is then attached to it (if Telegram refuses that edit, it follows in a short second message) |
+| `/help` | The same idea, a little longer: AI input, questions and advice, what each app screen does, with the app button |
+| Text, voice, photo, file, bank SMS | AI input or Ask AI (below) |
+| An old command (`/expense`, `/income`, `/transfer`, `/salaryday`, `/rate`, `/report`, `/balance`, `/settings`), an old reply-keyboard button (`📊 Report`, `💳 Balance`, `⚙️ Settings` in any language, exact label) or a button of an old inline screen | A short hint ("balance, report, history and settings are in the 📱 app now") with the app button; nothing is sent to the AI |
 
-- Per currency: income, expenses, balance (transfers are never counted), then expenses by category, biggest first,
-  with the share of the total and the change versus the previous period. USD and UZS are shown separately; when
-  a USD rate is known (see [USD exchange rate](#usd-exchange-rate)) an approximate combined total in UZS is added and the
-  chart sums both in UZS.
-- **Comparison rule:** while the period is still running it is compared with the *same number of days* from the
-  start of the previous period (day 10 of this month vs days 1-10 of the last one); a finished period is
-  compared with the whole previous one. The note under the report shows the compared dates.
-- Tap a category for its subcategory breakdown; ◀ / ▶ move to the previous / next period (never into the future);
-  the account balances are on 💳 Balance.
-- The image is a receipt-style card (see below). Only if the card cannot be rendered, the old matplotlib chart is
-  sent instead: a donut for up to 8 categories (tiny slices merged into "Other"), horizontal bars for more (top 9 +
-  "Other"), DejaVu Sans, drawn in a worker thread (`utils/charts.py`). If that fails too, the report is text only.
+On start-up `utils/set_bot_commands.py` deletes the bot commands of the default scope for the default list and for
+each language code (`uz`, `ru`, `en`), then registers only `/start` and `/help`, so no stale command stays in a
+client's menu. The chat menu button of every admin opens the Mini App's Home.
 
 ### Receipt cards
 
-The report image and the weekly / monthly advice come as receipt cards (`utils/cards.py`, templates in
+The weekly / monthly advice comes with a receipt card (`utils/cards.py`, templates in
 `templates/cards/`): Jinja2 HTML rendered to a 1080 px wide PNG (height follows the content) by headless Chromium
 through Playwright. The JetBrains Mono font is vendored in `assets/fonts/` (SIL OFL, `OFL.txt`) and embedded into
 the page, so rendering works offline.
@@ -87,13 +77,16 @@ the page, so rendering works offline.
   rest folded into "Other"), total vs the previous period, income / expenses / balance, a barcode per 7 days, top 3
   expenses, budgets as `[#######---]` bars and the payment method split (cash / debit / credit card) with credit
   limit use.
-- **Report** (📊 Report, any period; also with "Get advice now"): categories with share bars and change, total vs the
-  previous period (or its same days), over-budget categories.
+- **Report** (the running financial period; used by `cards.advice_card("now")`): categories with share bars and change,
+  total vs the previous period (or its same days), over-budget categories.
 - No expenses in the window: an "empty" receipt. Expenses in both UZS and USD: one section per currency, never
   converted.
 
 The stamp shows the change of total spending (▲ red = spent more, ▼ blue = less). The advice text is the photo's
 caption when it fits 1024 characters, otherwise the photo is followed by the text as a message.
+
+If the card cannot be rendered, `cards.card_or_chart` falls back to the matplotlib chart of `utils/charts.py` (a donut
+for up to 8 categories, bars for more), and without either the advice is text only.
 
 One Chromium is started lazily on the first card, reused (at most 2 pages at a time) and closed on shutdown. If
 Playwright or Chromium is missing, crashes or a card takes longer than 25 s, the problem is logged and the bot falls
@@ -119,11 +112,11 @@ task (started in `on_startup`, cancelled on shutdown) refreshes it at startup an
 after a failure); a failed fetch only logs a warning and keeps the last value. If no source ever answered, combined totals
 and cross-currency budget amounts are simply skipped.
 
-- `/rate` shows the rate in use and its source: `Markaziy bank, dd.mm.yyyy` (official), `xalqaro bozor kursi, dd.mm.yyyy`
-  (international market rate, when the Central Bank was unreachable) or `qo'lda` (manual). The same source (and its date)
-  is given to the AI in the context line and the `get_exchange_rate` tool.
-- `/rate 1 USD 12850 UZS` sets your own override (the example value is a placeholder); `/rate auto` (also `avto` / `авто`)
-  removes it and returns to the Central Bank rate.
+- Home and Settings in the Mini App show the rate in use and its source: Markaziy bank (official), Bozor kursi
+  (international market rate, when the Central Bank was unreachable) or Qo'lda (manual), with its date. The same source
+  (and its date) is given to the AI in the context line and the `get_exchange_rate` tool.
+- Settings → Dollar kursi → QO'LDA sets your own override (`PUT /api/settings {"rate_mode": "manual", "rate": "12850"}`,
+  a positive number below 10 000 000 with up to 6 decimals); AVTO removes it and returns to the Central Bank rate.
 - The AI assistant never states a rate from memory: the rate, its source and date are put into the context line and the
   `get_exchange_rate` tool result (and into the advice figures), and the system prompts forbid quoting any other.
 
@@ -132,11 +125,12 @@ on the default rate. Migration `0007` adds `official_rates.source` (`cbu` | `mar
 
 ### Budgets and alerts
 
-Settings → 🎯 Budgets: pick an expense category, then set, change or remove its monthly limit (UZS or USD; the month
-is the financial period). The report shows `spent / limit`, the percentage and a progress bar for every budget.
+Mini App → Settings → Oylik limitlar: pick an expense category, then set, change or remove its monthly limit (UZS or
+USD; the month is the financial period). The list shows `spent / limit`, the percentage and a striped bar for every
+budget; Home shows the sum of all limits.
 Spending in the other currency counts towards a budget at the USD rate in use (see [USD exchange rate](#usd-exchange-rate)); without any known rate it is not converted.
 
-After an expense is saved (manually or from AI input), edited (amount, category or account) or after a
+After an expense is saved (in the Mini App or from AI input), edited (amount, category or account) or after a
 transfer touches a credit card, the bot checks the budgets of the affected categories and the affected credit cards
 and sends **one message per threshold (80% and 100%) per period** for each category / card:
 
@@ -145,11 +139,12 @@ and sends **one message per threshold (80% and 100%) per period** for each categ
   period is not announced again;
 - one change that jumps over both thresholds produces only the 100% alert;
 - changing or removing a budget limit clears that category's alerts for a fresh start;
-- the existing "debt above the limit" warning in the save confirmation stays; its card does not get a second
-  100% message for the same save.
+- the "debt above the limit" warning of the save confirmation (the chat card, or the Mini App's toast) stays; its card
+  does not get a second 100% message for the same save.
 
 Checks run in one service, `db.check_alerts` (`utils/db_api/alerts.py`), called through
-`utils/notify_alerts.send_alerts` from the handlers that save or edit operations.
+`utils/notify_alerts.send_alerts` from AI input and from the Mini App API (`utils/miniapp/screens.py`) after saves and
+edits; the message goes to the chat through the bot either way.
 
 ### AI provider (Google Gemini or Anthropic Claude)
 
@@ -169,7 +164,7 @@ from 01.01.2027), so an Ask AI answer with a few tool calls or one advice is rou
 
 ### Saved operation card
 
-Every saved operation (AI input, `/expense`, `/income`, `/transfer`) is confirmed with the same short HTML card
+Every operation saved from the chat (AI input) is confirmed with the same short HTML card
 (`utils/misc/texts.operation_card`, labels in uz / ru / en):
 
 ```
@@ -203,17 +198,18 @@ There is no confirmation step: every recognized operation is saved right away an
   name, a valid account), the operation is saved at once. Otherwise the bot asks only "💳 Which payment method?"
   with one button per account (of the operation's currency) and saves on tap; typing a short account name
   (`naqd`, `uob`) works too. When several operations of one message lack the account, it is asked once and the
-  answer applies to all of them. The last button, "➕ Add a new card", opens the add-account flow and the waiting
-  operations are saved to the new card (if its currency does not fit, the question is asked again). Other typed
-  text without digits gets a short hint ("pick a button or add a new card"); text with an operation in it is
-  analyzed as usual. With only one account there is nothing to ask: the operation is saved to it.
+  answer applies to all of them. With the Mini App on, the last button, "➕ Yangi karta qo'shish", is a Web App button
+  that opens the app's new-card form (`#/new`); the operations keep waiting, and typing the new card's name in the chat
+  afterwards saves them to it (the question says so). Other typed text without digits gets a short hint ("pick a
+  button or type the account name"); text with an operation in it is analyzed as usual. With only one account there is
+  nothing to ask: the operation is saved to it.
 - **Category.** An expense or income without a recognizable category goes to "Other" ("Boshqa" / "Прочее";
   "Other income" for incomes), created if the user has none.
 - **Amount.** An operation without an amount is not saved; the bot answers that no amount was understood.
-- A transfer whose receiving account is unclear is not saved; the bot points to `/transfer`.
+- A transfer whose receiving account is unclear is not saved; the bot points to the Mini App (➕ → O'tkazma).
 - **Duplicates.** The same SMS, photo or file sent again is not saved twice ("already saved"). The same amount on
   the same account within 10 minutes (e.g. a typed taxi and then its bank SMS) is saved, with a warning that
-  points to ⚙️ Settings → 🧾 History for deleting it. Typed text has no fingerprint, so writing "coffee 18000"
+  points to the Mini App's History for deleting it. Typed text has no fingerprint, so writing "coffee 18000"
   again on another day is a new expense.
 - Budget and credit limit alerts follow the save confirmations. Saved rows have `source = "ai"`.
 
@@ -230,11 +226,9 @@ anything doubtful is left empty (then the account is asked, the category falls b
 whose **last 4 digits** were saved in the Mini App; an account without saved digits still matches when its
 **name contains those 4 digits** (e.g. `UOB 1234`; migration `0005` copied such digits into the new field).
 
-While you are inside a manual step (e.g. typing an amount after `/expense`), text goes to that step, not to the
-AI. The reply-keyboard buttons are handled before everything else (`handlers/users/menu.py` is registered right
-after `start`), so their texts never reach the AI or a form step, and pressing one ends any flow in progress.
-Without the key of the selected provider the manual commands still work and free text gets an "AI input is not
-configured" answer.
+Old commands and old reply-keyboard labels are handled before AI input (`handlers/users/legacy.py`), so they never
+reach the AI. Without the key of the selected provider free text gets an "AI input is not configured" answer that
+points to manual entry in the Mini App.
 
 > **Privacy:** receipts and texts you send for AI input, together with the names of your accounts and
 > categories, are sent to the selected AI provider (Google Gemini API or Anthropic Claude API) for
@@ -245,8 +239,8 @@ configured" answer.
 **Ask AI.** Just type a question ("how much did I spend on taxi this month?", "am I spending more than last
 month?", "how much credit is left?"): the extraction model classifies every free-text message as an
 *operation*, a *question* or *other*; questions go to Ask AI, operations are saved. Follow-up questions work
-("and last month?") because the conversation is kept and the extraction model is told about it; `/start`, a
-reply-keyboard button or a newly saved operation starts a fresh one. Photos, files and bank SMS always go to AI
+("and last month?") because the conversation is kept and the extraction model is told about it; `/start` or a
+newly saved operation starts a fresh one. Photos, files and bank SMS always go to AI
 input.
 
 How it works (`utils/ai/assistant.py`, `utils/ai/tools.py`): the analysis model (`gemini-3.8-flash` or
@@ -262,9 +256,9 @@ and 4 minutes per question) and answers in your language as plain text. The conv
 **Advice.** 📅 a weekly summary every **Monday at 09:00** (Tashkent time): the last 7 days vs the 7 before,
 top categories, unusual spending, budget status and 2-4 saving tips. 📆 A monthly review at **09:00 on the
 first day of a new financial month** (your salary day): the finished period vs the one before, budgets,
-credit cards and advice for the new period. Turn either off in ⚙️ Settings → 🤖 AI advice; 💡 Get advice now
-(in the report and the advice settings) reviews the running period on demand. Nothing is sent for a
-window without income or expenses.
+credit cards and advice for the new period. Turn either off in the Mini App (Settings → AI maslahat); the automatic
+advice carries a button to those settings. The Mini App's Report shows an advice on the running period (or the last 7
+days for HAFTA), generated on demand. Nothing is sent for a window without income or expenses.
 The scheduler (`utils/advice_scheduler.py`) is an asyncio task started in `on_startup` that checks once a
 minute; what was sent is stored on the user row (migration `0004`), so a restart never sends twice and advice
 missed while the bot was down at 09:00 is sent on the next start the same day. The model gets pre-computed
@@ -273,43 +267,77 @@ summaries, not raw rows.
 > **Privacy:** your questions, the data the assistant looks up to answer them (totals, categories,
 > matching operations, balances) and the summaries used for advice are sent to the selected AI provider.
 
-### Mini App (cards)
+### Mini App
 
-A Telegram Mini App for managing accounts, served by the bot process itself: `on_startup` starts an aiohttp web
-server on `PORT` (default `8080`, all interfaces) next to long polling and stops it on shutdown. The page is plain
-HTML + CSS + JS in `webapp/` (no build step), drawn as paper receipts in JetBrains Mono (served from `assets/fonts/`,
-no Google Fonts); the server code is in `utils/miniapp/`.
+A Telegram Mini App with every screen except the chat input, served by the bot process itself: `on_startup` starts an
+aiohttp web server on `PORT` (default `8080`, all interfaces) next to long polling and stops it on shutdown. The page is
+plain HTML + CSS + JS in `webapp/` (no build step, hash routes), drawn as paper receipts in JetBrains Mono (served from
+`assets/fonts/`, no Google Fonts); the server code is in `utils/miniapp/`. Home, History, Report and Settings share a
+bottom tab bar (ASOSIY, TARIX, the raised red ➕, HISOBOT, SOZLAMA); the content scrolls above it.
 
-- **💳 Kartalarim:** total balance in UZS (plus USD when there are USD accounts), the number of accounts, every account
-  with a type tag (NAQD / UZCARD / HUMO / VISA / MASTERCARD, KREDIT for credit cards), name, `•••• 1234` and
-  balance; credit cards show the debt in red and the limit. "Karta qo'shish" opens the form.
-- **Yangi karta / Tahrirlash:** type, name / bank, last 4 digits (exactly 4; optional for cash), currency, current
-  balance and a "Kredit karta" box that turns the balance into the current debt and shows the credit limit. Only the
-  last 4 digits are stored, never the card number; two active accounts cannot share them. The current balance works
-  like the opening balance in the chat: editing it moves the opening balance by the difference, so history stays
-  consistent. The currency of an account with operations cannot change.
-- **Karta tafsiloti:** a stamp with the type, the balance (or debt), last 4 and currency, the expense and income of
-  the current financial month (from the salary day) and the last 10 operations. Delete asks for confirmation: an
-  account without operations is deleted, one with operations is archived (hidden, history kept), like
-  "deactivate" in the chat.
-- Texts are in uz / ru / en (`WEBAPP_TEXTS` in `utils/i18n.py`), in the language chosen in the bot. The Telegram Back
-  button and the in-page buttons both work.
+- **Asosiy (Home, `#/`):** the financial month's name and the USD rate with its source (Central Bank / market /
+  manual); the total balance in UZS (USD accounts converted at that rate, or listed separately when no rate is known);
+  this financial month's expense and income (from the salary day, like the reports); the monthly limit (sum of all
+  budgets vs the spending in those categories, converted to UZS) only when budgets exist; a horizontal strip of cards
+  (each opens its card, "Hammasi ›" the list) and the last 3 operations with "Tarix ›".
+- **➕ Yangi amal (`#/op/new`):** XARAJAT / KIRIM / O'TKAZMA, a big amount with UZS / USD, category chips with
+  subcategory chips (the user's own categories; there is no "+ other": the backend cannot create categories), payment
+  method chips (accounts of the currency; a transfer gets From and To chips instead), note and date / time (now by
+  default, any past moment can be picked). SAQLASH calls `record_operation` / `record_transfer`, so balances, credit
+  cards and transfers behave exactly as in the chat, and limit alerts are sent to the chat through the bot. A credit
+  card pushed over its limit is reported in the app (the chat does not repeat it as a 100% alert).
+- **Edit (`#/op/{id}`, from History, Home or a card):** the same screen, prefilled, with "Amalni o'chirish" (confirmed).
+  Amount, category, account (same currency), note and time can change, through `update_amount`, `update_category`,
+  `update_account` and `update_details`; the kind, the currency and the accounts of a transfer are fixed. Alerts follow
+  an edit as they did in the chat. Deleting a transfer removes both legs.
+- **Tarix (`#/history`):** search (note, category, subcategory), Hammasi / Chiqim / Kirim chips and an account
+  dropdown; grouped by day (BUGUN / KECHA / dd.mm), 30 at a time with automatic loading and a "load more" button.
+- **Hisobot (`#/report`):** HAFTA (Monday to Sunday) / OY (the financial month) / YIL (the calendar year). The expense
+  total with a stamp of the change vs the same number of days of the previous period (▲ red = more, ▼ blue = less),
+  categories with striped bars (the biggest in red; tap one for its subcategories), income and the remainder. With a USD
+  rate everything is summed in UZS, otherwise each currency has its own slip. An AI advice box is loaded separately
+  (skeleton first; `assistant.advice`, "weekly" for the week, the running period otherwise; reused for 30 minutes) and
+  hidden when AI is off, has nothing to say or fails.
+- **Sozlamalar (`#/settings`):** Kartalar va hisoblar (the cards screens), Maosh kuni with − / + (1-28), Dollar kursi
+  AVTO / QO'LDA (QO'LDA reveals the rate input; AVTO removes the override; the current rate and its source are shown),
+  Oylik limitlar (a list of category limits with used %, add, change and delete), weekly / monthly AI advice switches
+  and the language (O'ZBEKCHA / РУССКИЙ / ENGLISH, stored for the bot too; the app reloads its texts).
+- **Kartalarim (`#/cards`), Karta tafsiloti (`#/card/{id}`), Yangi karta / Tahrirlash (`#/new`, `#/edit/{id}`):** as
+  before: balances, add / edit / delete (archive with history), the month's totals and the last operations of a card.
+  Only the last 4 digits are stored, never the card number; two active accounts cannot share them. Editing the current
+  balance moves the opening balance by the difference. The currency of an account with operations cannot change.
+- Texts are in uz / ru / en (`WEBAPP_TEXTS`). The Telegram Back button returns to where the user came from.
 
-**Opening it.** With `WEBAPP_URL` set to the public `https://` address of the server, ⚙️ Settings → 💳 Accounts gets a
-"💳 Kartalarim (Mini App)" button and each admin's chat menu button opens the Mini App (set at start-up; reset to the
-default when `WEBAPP_URL` is empty). Without `WEBAPP_URL`, or with a non-https one, the server still runs but the bot
-shows no Mini App buttons (Telegram only opens https Mini Apps). The "➕ Add a new card" button of the AI account
-question still uses the chat flow.
+**Opening it.** With `WEBAPP_URL` set to the public `https://` address of the server, each admin's chat menu button opens
+Home, `/start` and `/help` carry the "📱 Ilovani ochish" button, the AI account question ends with "➕ Yangi karta
+qo'shish" (opens `#/new`) and the automatic advice links to Settings. Without `WEBAPP_URL`, or with a non-https one,
+the server still runs but the bot shows no Mini App buttons (Telegram only opens https Mini Apps).
 
 **Security.** Every `/api/` request carries `Telegram.WebApp.initData` in the `X-Telegram-Init-Data` header. The server
 checks its HMAC-SHA256 signature with the bot token (secret = `HMAC_SHA256("WebAppData", BOT_TOKEN)`), refuses data
 older than 24 hours and takes the user id from it; only IDs in `ADMINS` get through (401 for missing / bad /
-expired data, 403 for anyone else). initData and the token are never logged.
+expired data, 403 for anyone else). Every query is scoped to that user id, so another user's accounts, operations and
+budgets answer 404. initData and the token are never logged. An admin who never chose a language gets 409 `start`.
 
-API (amounts are integers in minor units): `GET /api/me` (language and texts), `GET /api/accounts`,
-`POST /api/accounts`, `GET /api/accounts/{id}` (with month totals and recent operations),
-`PUT /api/accounts/{id}`, `DELETE /api/accounts/{id}` (`deleted` or `archived`). `GET /` serves the page,
-`GET /healthz` answers `ok`.
+**API** (JSON; amounts are integers in minor units; every input is validated on the server, errors are
+`{"error": code}` with 400 / 404 / 409):
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /api/me` | language, texts, whether AI is configured |
+| `GET /api/home` | month, rate, balance, month expense / income, limit (or null), accounts, last 3 operations |
+| `GET /api/form` | categories with subcategories (expense / income) and active accounts for the operation form |
+| `GET /api/operations?q=&kind=all\|expense\|income&account_id=&offset=&limit=` | history page (`total`, `next_offset`) |
+| `POST /api/operations` | create: `kind` expense \| income (`currency`, `account_id`, `category`, `subcategory`) or transfer (`from_account_id`, `to_account_id`); `amount_minor`, `note`, `occurred_at` (`YYYY-MM-DDTHH:MM`, not in the future); answers the operation and `over_limit` |
+| `GET / PUT / DELETE /api/operations/{id}` | read, edit (same fields; kind, currency and transfer accounts fixed), delete |
+| `GET /api/report?period=week\|month\|year` | window, comparison window and per-currency (or combined UZS) sections |
+| `GET /api/report/subcategories?period=&category=&currency=&converted=` | subcategories of one category |
+| `GET /api/advice?period=` | `{"text": ...}` or `{"text": null, "reason": "not_configured" \| "no_data" \| "error"}` |
+| `GET / PUT /api/settings` | `salary_day`, `rate_mode` auto \| manual (+ `rate`), `advice_weekly`, `advice_monthly`, `lang`; a PUT is checked as a whole before anything is saved |
+| `GET / PUT / DELETE /api/budgets` | list with usage; set (`category`, `currency`, `amount_minor`); delete (`?category=`) |
+| `GET / POST /api/accounts`, `GET / PUT / DELETE /api/accounts/{id}` | the cards screens (`deleted` or `archived`) |
+
+`GET /` serves the page, `GET /healthz` answers `ok`.
 
 ### Environment variables (`.env`)
 
@@ -331,7 +359,7 @@ API (amounts are integers in minor units): `GET /api/me` (language and texts), `
 | `CLAUDE_TIMEOUT` | Seconds to wait for the extraction model, default `60`                   |
 | `CLAUDE_ANALYSIS_TIMEOUT` | Seconds per Ask AI / advice request, default `180`              |
 | `CLAUDE_REFUSAL_FALLBACK` | Retry a policy-declined Ask AI / advice request on Anthropic's recommended fallback model (server-side, beta), default `true` |
-| `WEBAPP_URL` | Public `https://` address of the Mini App web server, e.g. `https://finance-ai-bot-production.up.railway.app`; empty (default) = no Mini App buttons |
+| `WEBAPP_URL` | Public `https://` address of the Mini App web server, e.g. `https://finance-ai-bot-production.up.railway.app`; empty (default) = no Mini App buttons (the chat then has no way to the reports and settings) |
 | `PORT` | Port of the Mini App web server, default `8080` (Railway sets it) |
 
 `.env` is gitignored, so your secrets are never committed. Copy `.env.example` to start.
@@ -413,6 +441,8 @@ pytest
 
 The tests use a temporary SQLite database and never touch `.env` values or your real database.
 The Claude and Gemini SDKs are mocked, so no API key is needed and no requests are sent.
+The Mini App API is tested with aiohttp's test client and dummy-signed initData (`tests/test_miniapp.py`,
+`tests/test_miniapp_screens.py`).
 
 ## Project structure
 
@@ -423,25 +453,24 @@ The Claude and Gemini SDKs are mocked, so no API key is needed and no requests a
 ├── data/
 │   └── config.py          # Reads settings from .env
 ├── handlers/
-│   ├── users/             # start, menu (reply keyboard), help, settings, finance (/expense, /income, history), transfer, accounts, reports, budgets, operations, advice, ai_input (AI input), ask_ai, echo
+│   ├── users/             # start, help, legacy (hints for old commands / keyboard), ai_input (AI input), ask_ai, echo
 │   ├── groups/            # group chat handlers
 │   ├── channels/          # channel post handlers
 │   └── errors/            # global error handler
 ├── keyboards/
-│   ├── default/           # reply keyboard (📊 Report, 💳 Balance, ⚙️ Settings)
-│   └── inline/            # inline keyboards
+│   └── inline/            # language picker and the Mini App (Web App) buttons
 ├── middlewares/           # access (ADMINS only), language, throttling
 ├── states/                # FSM states
 ├── filters/               # custom filters
 ├── migrations/            # alembic migrations (0007: rate source)
-├── webapp/                # Mini App page: index.html, app.css, app.js (no build step)
+├── webapp/                # Mini App page: index.html, app.css, app.js (no build step; Home, NewOp, History, Report, Settings, cards)
 ├── tests/                 # pytest suite (service layer, reports / alerts / charts, AI parsing with mocked Claude / Gemini clients)
 └── utils/
     ├── ai/                # provider switch + extraction (core.py), clients (gemini.py, claude.py), validation (parser.py), Ask AI + advice (assistant.py, tools.py)
     ├── advice_scheduler.py # weekly / monthly advice (asyncio task)
     ├── charts.py          # matplotlib expense chart (PNG bytes)
     ├── db_api/            # database helpers (reports, budgets, alerts, operations, ...)
-    ├── miniapp/           # Mini App web server (aiohttp), JSON API, initData validation
+    ├── miniapp/           # Mini App web server (aiohttp), JSON API (api.py: auth + accounts, screens.py: the other screens), initData validation
     ├── misc/              # logging, throttling decorator
     ├── notify_admins.py   # start-up notification
     ├── rates.py           # default USD rate: Central Bank of Uzbekistan + market fallbacks (fetch chain, cache, background refresh)

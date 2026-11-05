@@ -5,7 +5,6 @@ from datetime import date, datetime, timedelta
 import pytest
 from aiogram.utils.exceptions import TelegramAPIError
 
-from handlers.users import reports as report_handlers
 from utils import advice_scheduler as sched
 from utils import cards
 from utils.ai import assistant
@@ -302,16 +301,16 @@ async def test_render_timeout_is_handled(monkeypatch):
     assert await cards.render_card(weekly_data([expense(WEEK_START, 100)]), "en") is None
 
 
-async def test_report_screen_falls_back_to_matplotlib_chart(monkeypatch):
+async def test_card_falls_back_to_matplotlib_chart(monkeypatch):
     cash, *_ = await setup_user()
     await db.record_operation(USER, "expense", "UZS", [db.Leg(cash.id, 50_000)], "Food")
 
     async def no_card(*args, **kwargs):
         return None
 
-    monkeypatch.setattr(report_handlers.cards, "report_card", no_card)
+    monkeypatch.setattr(cards, "render_card", no_card)
     report = await db.build_period_report(USER, 0)
-    png = await report_handlers.make_image(USER, report, "en")
+    png = await cards.card_or_chart(await cards.report_data(USER, report), "en")
     assert png[:8] == b"\x89PNG\r\n\x1a\n"
 
 
