@@ -20,6 +20,18 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from .core import MAX_AUDIO_BYTES, PDF_TYPE, AIError, Media, Step, ToolCall, audio_mime
 
+try:
+    import aiohttp as _aiohttp
+
+    # aiogram 2 pins aiohttp 3.8, but google-genai's aiohttp retry path references
+    # aiohttp.ClientConnectorDNSError (added in aiohttp 3.10). On a Gemini error (e.g. 503) that raised
+    # AttributeError and hid the real failure. A DNS error is a ClientConnectorError subclass in 3.10+,
+    # so aliasing it to the base class is semantically safe in the SDK's `except (...)` tuples.
+    if not hasattr(_aiohttp, "ClientConnectorDNSError"):
+        _aiohttp.ClientConnectorDNSError = _aiohttp.ClientConnectorError
+except ImportError:  # pragma: no cover
+    pass
+
 try:  # The bot must still start (manual menus only) if the SDK is not installed
     from google import genai
     from google.genai import errors as genai_errors
@@ -160,7 +172,12 @@ class GeminiClient:
         if not self.configured:
             raise AIError("not_configured")
         if self._client is None:
-            self._client = genai.Client(api_key=self.api_key)
+            # An explicit httpx transport makes the SDK skip its aiohttp path entirely (see the shim above)
+            http_options = None
+            if _HTTP_LIBS:
+                transport = _HTTP_LIBS[0].AsyncHTTPTransport()
+                http_options = genai_types.HttpOptions(async_client_args={"transport": transport})
+            self._client = genai.Client(api_key=self.api_key, http_options=http_options)
         return self._client
 
     # ---- Requests ----

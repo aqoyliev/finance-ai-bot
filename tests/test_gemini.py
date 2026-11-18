@@ -441,3 +441,26 @@ async def test_voice_not_configured_names_the_key(handler):
     await ai_input.voice_input(message, None, "en")
     assert "not configured" in message.answers[0] and "GEMINI_API_KEY" in message.answers[0]
     assert seen["downloads"] == []
+
+
+# ---- aiohttp 3.8 compatibility (google-genai references aiohttp.ClientConnectorDNSError) ----
+
+def test_aiohttp_shim_defines_dns_error():
+    import aiohttp
+    assert issubclass(aiohttp.ClientConnectorDNSError, aiohttp.ClientConnectorError)
+
+
+def test_sdk_client_uses_httpx_not_aiohttp():
+    client = gemini.GeminiClient("g-key", "flash-lite-x", "flash-x")
+    sdk = client._sdk()
+    assert sdk._api_client._use_aiohttp() is False
+
+
+@pytest.mark.asyncio
+async def test_503_server_error_maps_to_unavailable_not_attribute_error():
+    err = genai_errors.ServerError(503, {"error": {"code": 503, "message": "overloaded", "status": "UNAVAILABLE"}})
+    client, _ = fake_client(err)
+    with pytest.raises(core.AIError) as info:
+        await client._send({"model": "m", "contents": [], "config": None}, 1)
+    assert info.value.code == "unavailable"
+    assert "ClientConnectorDNSError" not in str(info.value)
