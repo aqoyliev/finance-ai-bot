@@ -13,9 +13,11 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Needs apt and root: installs Chromium plus the system libraries it depends on.
+# Needs apt and root: installs libatomic1 first, because playwright's bundled node driver needs it
+# and python:3.11-slim-bookworm does not ship it. Then installs Chromium plus the system libraries it depends on.
 # The apt lists are removed in the same layer to keep the image small.
-RUN python -m playwright install --with-deps chromium \
+RUN apt-get update && apt-get install -y --no-install-recommends libatomic1 \
+    && python -m playwright install --with-deps chromium \
     && rm -rf /var/lib/apt/lists/*
 
 COPY . .
