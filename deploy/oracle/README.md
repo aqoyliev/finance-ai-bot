@@ -110,11 +110,11 @@ The whole state is one file: `deploy/oracle/data/finance.db`.
 
 **Daily backup on the VM.** `backup.sh` takes an online copy with SQLite's backup API (no downtime),
 checks `pragma integrity_check`, gzips it to `backups/finance-YYYYMMDD-HHMM.db.gz` and keeps 14 days
-(`KEEP_DAYS`). Install it in root's crontab (21:15 UTC = 02:15 Tashkent):
+(`KEEP_DAYS`). Install it in root's crontab (01:00 UTC = 06:00 Tashkent):
 
 ```bash
 cd ~/finance-ai-bot/deploy/oracle && chmod +x backup.sh && sudo ./backup.sh   # one run to test
-line="15 21 * * * $PWD/backup.sh >> /var/log/finance-bot-backup.log 2>&1"
+line="0 1 * * * $PWD/backup.sh >> /var/log/finance-bot-backup.log 2>&1"
 { sudo crontab -l 2>/dev/null | grep -v backup.sh || true; echo "$line"; } | sudo crontab -
 ```
 

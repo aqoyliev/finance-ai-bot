@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Daily SQLite backup of the bot's database. Run by root's cron (see README):
-#   15 21 * * * /home/ubuntu/finance-ai-bot/deploy/oracle/backup.sh >> /var/log/finance-bot-backup.log 2>&1
+#   0 1 * * * /home/ubuntu/finance-ai-bot/deploy/oracle/backup.sh >> /var/log/finance-bot-backup.log 2>&1
 # Takes an online copy through SQLite's backup API (safe while the bot writes), checks it,
 # gzips it into deploy/oracle/backups/ and keeps the last KEEP_DAYS days.
 set -euo pipefail
