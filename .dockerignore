@@ -26,3 +26,6 @@ requirements-dev.txt
 !README.md
 Dockerfile
 .dockerignore
+
+# Deployment configs are not needed in the image; deploy/oracle/ also holds the real .env and the SQLite volume
+deploy

@@ -1,0 +1,6 @@
+# PUBLIC_HOST comes from deploy/oracle/.env (e.g. 1-2-3-4.sslip.io).
+# Caddy gets and renews a Let's Encrypt certificate for it automatically.
+{$PUBLIC_HOST} {
+	encode gzip zstd
+	reverse_proxy bot:8080
+}

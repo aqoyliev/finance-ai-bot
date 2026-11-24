@@ -131,3 +131,7 @@ dmypy.json
 .env
 # Local SQLite databases
 *.db
+
+# Oracle Cloud deployment: real config and the SQLite volume
+deploy/oracle/.env
+deploy/oracle/data/
