@@ -88,7 +88,7 @@ def make_client(provider: Optional[str] = None):
                             fallbacks=config.CLAUDE_REFUSAL_FALLBACK)
     if provider == "gemini":
         from .gemini import GeminiClient
-        return GeminiClient(config.GEMINI_API_KEY, config.GEMINI_EXTRACT_MODEL, config.GEMINI_ANALYSIS_MODEL,
+        return GeminiClient(config.GEMINI_KEYS, config.GEMINI_EXTRACT_MODEL, config.GEMINI_ANALYSIS_MODEL,
                             config.GEMINI_TIMEOUT, analysis_timeout=config.GEMINI_ANALYSIS_TIMEOUT)
     raise ValueError(f"Unknown AI_PROVIDER {provider!r}; use one of {', '.join(PROVIDERS)}")
 

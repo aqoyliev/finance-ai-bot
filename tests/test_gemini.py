@@ -464,3 +464,78 @@ async def test_503_server_error_maps_to_unavailable_not_attribute_error():
         await client._send({"model": "m", "contents": [], "config": None}, 1)
     assert info.value.code == "unavailable"
     assert "ClientConnectorDNSError" not in str(info.value)
+
+
+# ---- Multiple keys: failover ----
+
+def test_gemini_keys_parsing_and_dedupe():
+    assert config.gemini_keys("", "") == []
+    assert config.gemini_keys("", "solo") == ["solo"]
+    assert config.gemini_keys(" a, b ,,a,", "b") == ["a", "b"]
+    assert config.gemini_keys("a,b", "c") == ["a", "b", "c"]
+
+
+def multi_client(*per_key):
+    """A client with one fake SDK per key; per_key = result lists."""
+    models = [FakeModels(*results) for results in per_key]
+    sdks = [SimpleNamespace(aio=SimpleNamespace(models=m)) for m in models]
+    return gemini.GeminiClient(["k1111", "k2222", "k3333"][:len(sdks)], "m", client=sdks), models
+
+
+@pytest.fixture
+def clock(monkeypatch):
+    now = [1000.0]
+    monkeypatch.setattr(gemini, "_clock", lambda: now[0])
+    return now
+
+
+async def test_quota_fails_over_to_next_key_and_stays_sticky(clock):
+    client, (first, second) = multi_client([api_error(429, "slow down", "RESOURCE_EXHAUSTED")],
+                                           [reply(text("one")), reply(text("two"))])
+    assert await client.generate(["hi"]) == "one"
+    assert len(first.calls) == 1 and len(second.calls) == 1
+    assert await client.generate(["hi"]) == "two"  # sticky: key 2 now, key 1 is not retried
+    assert len(first.calls) == 1 and len(second.calls) == 2
+
+
+async def test_all_keys_exhausted_raises_quota(clock):
+    err = api_error(429, "limit", "RESOURCE_EXHAUSTED")
+    client, (first, second) = multi_client([err], [err])
+    with pytest.raises(core.AIError) as raised:
+        await client.generate(["hi"])
+    assert raised.value.code == "quota" and len(first.calls) == len(second.calls) == 1
+    with pytest.raises(core.AIError) as raised:  # everything is resting: no more SDK calls
+        await client.generate(["hi"])
+    assert raised.value.code == "quota" and len(first.calls) == len(second.calls) == 1
+
+
+async def test_auth_error_fails_over(clock):
+    client, _ = multi_client([api_error(403, "denied", "PERMISSION_DENIED")], [reply(text("ok"))])
+    assert await client.generate(["hi"]) == "ok"
+
+
+async def test_other_errors_do_not_fail_over(clock):
+    client, (first, second) = multi_client([api_error(503, "overloaded", "UNAVAILABLE")], [reply(text("x"))])
+    with pytest.raises(core.AIError) as raised:
+        await client.generate(["hi"])
+    assert raised.value.code == "unavailable" and not second.calls
+
+
+async def test_cooldown_expiry_brings_key_back(clock):
+    client, (first, second) = multi_client([api_error(429, "limit", "RESOURCE_EXHAUSTED"), reply(text("back"))],
+                                           [reply(text("two")), api_error(429, "limit", "RESOURCE_EXHAUSTED")])
+    assert await client.generate(["hi"]) == "two"
+    clock[0] += gemini.QUOTA_COOLDOWN + 1
+    # key 2 is active and now fails; key 1 has rested long enough and takes over
+    assert await client.generate(["hi"]) == "back"
+    assert len(first.calls) == 2
+
+
+async def test_daily_quota_rests_longer(clock):
+    err = api_error(429, "Quota exceeded for metric ... per day", "RESOURCE_EXHAUSTED")
+    client, (first, second) = multi_client([err, reply(text("late"))], [reply(text("two"))])
+    assert await client.generate(["hi"]) == "two"
+    clock[0] += gemini.QUOTA_COOLDOWN + 1
+    assert client._attempt_order() == [1]  # key 1 still resting
+    clock[0] += gemini.DAILY_QUOTA_COOLDOWN
+    assert client._attempt_order() == [1, 0]

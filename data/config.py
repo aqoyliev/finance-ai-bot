@@ -31,6 +31,21 @@ if AI_PROVIDER not in ("gemini", "claude"):
 
 # --- Google Gemini (Google AI Studio key) ---
 GEMINI_API_KEY = env.str("GEMINI_API_KEY", default="")  # empty = AI disabled when AI_PROVIDER=gemini
+GEMINI_API_KEYS_RAW = env.str("GEMINI_API_KEYS", default="")  # comma-separated free-tier keys with failover
+
+
+def gemini_keys(keys: str = "", single: str = "") -> list:
+    """Effective Gemini key list: the comma-separated `keys` first, then `single` (GEMINI_API_KEY) if it is
+    not among them. Whitespace is stripped, empty entries and duplicates are dropped, order is kept."""
+    result: list = []
+    for key in [*str(keys or "").split(","), str(single or "")]:
+        key = key.strip()
+        if key and key not in result:
+            result.append(key)
+    return result
+
+
+GEMINI_KEYS = gemini_keys(GEMINI_API_KEYS_RAW, GEMINI_API_KEY)
 GEMINI_EXTRACT_MODEL = env.str("GEMINI_EXTRACT_MODEL", default="gemini-3.5-flash-lite")  # receipts, SMS, voice
 GEMINI_ANALYSIS_MODEL = env.str("GEMINI_ANALYSIS_MODEL", default="gemini-3.8-flash")  # Ask AI, advice
 GEMINI_TIMEOUT = env.int("GEMINI_TIMEOUT", default=60)  # seconds per extraction / voice request

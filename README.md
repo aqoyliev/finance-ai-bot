@@ -355,6 +355,7 @@ budgets answer 404. initData and the token are never logged. An admin who never 
 | `DATABASE_URL` | SQLAlchemy async URL, default `sqlite+aiosqlite:///./finora.db`          |
 | `AI_PROVIDER` | `gemini` (default) or `claude`; voice input needs `gemini` |
 | `GEMINI_API_KEY` | Google AI Studio key ([aistudio.google.com/apikey](https://aistudio.google.com/apikey)); empty = AI off when the provider is `gemini` |
+| `GEMINI_API_KEYS` | Optional comma-separated list of extra free-tier keys (`key1,key2`); on a quota or auth error the bot switches to the next key (a quota-limited key rests for 1 minute, or 1 hour for a daily limit or an invalid key). `GEMINI_API_KEY` is appended to the list if not already in it |
 | `GEMINI_EXTRACT_MODEL` | Model for receipts, SMS, free text and voice, default `gemini-3.5-flash-lite` |
 | `GEMINI_ANALYSIS_MODEL` | Model for Ask AI and advice, default `gemini-3.8-flash` |
 | `GEMINI_TIMEOUT` | Seconds per extraction / voice request, default `60` |
@@ -393,6 +394,7 @@ the Dockerfile builder, restart on failure and exactly 1 replica.
    | `DATABASE_URL` | Optional. The image defaults to `sqlite+aiosqlite:////data/finance.db` (four slashes = absolute path) |
    | `AI_PROVIDER` | `gemini` (default) or `claude`; voice input needs `gemini` |
    | `GEMINI_API_KEY` | Google AI Studio key; with `gemini` an empty key disables AI input, Ask AI and advice |
+   | `GEMINI_API_KEYS` | Optional. Comma-separated extra Gemini keys; the bot fails over to the next key on quota errors |
    | `GEMINI_EXTRACT_MODEL` | Model for receipts, SMS, free text, voice (default `gemini-3.5-flash-lite`) |
    | `GEMINI_ANALYSIS_MODEL` | Model for Ask AI and advice (default `gemini-3.8-flash`) |
    | `GEMINI_TIMEOUT` / `GEMINI_ANALYSIS_TIMEOUT` | Request timeouts in seconds (defaults `60` / `180`) |

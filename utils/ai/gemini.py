@@ -16,6 +16,7 @@ unchanged, as Gemini 3 requires for function calling.
 import asyncio
 import json
 import logging
+import time
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from .core import MAX_AUDIO_BYTES, PDF_TYPE, AIError, Media, Step, ToolCall, audio_mime
@@ -48,6 +49,11 @@ for _name in ("httpx", "httpx2"):
 
 log = logging.getLogger(__name__)
 
+
+def _clock() -> float:
+    """Current time in seconds (tests replace this to move time forward)."""
+    return time.time()
+
 IMAGE_TYPES = ("image/jpeg", "image/png", "image/webp", "image/heic", "image/heif")
 MAX_MEDIA_BYTES = 14 * 1024 * 1024  # images and PDFs; the inline request limit is 20 MB including base64
 TIMEOUT_MARGIN = 5  # seconds on top of the SDK timeout for the outer asyncio guard
@@ -56,6 +62,12 @@ EFFORTS = ("minimal", "low", "medium", "high")  # effort names map 1:1 onto Gemi
 # Finish reasons that mean the model declined (safety filters) rather than failed
 REFUSAL_REASONS = ("SAFETY", "PROHIBITED_CONTENT", "BLOCKLIST", "SPII", "RECITATION", "IMAGE_SAFETY",
                    "IMAGE_PROHIBITED_CONTENT")
+# Key failover: how long a key rests after it failed with "quota" / "auth" (seconds). A per-minute limit clears
+# within about a minute; a daily limit (message mentions "per day") only resets at midnight Pacific time, so
+# such a key rests for an hour and is then simply tried again (no timezone maths).
+QUOTA_COOLDOWN = 60
+DAILY_QUOTA_COOLDOWN = 3600
+AUTH_COOLDOWN = 3600
 BAD_CALL_REASONS = ("MALFORMED_FUNCTION_CALL", "UNEXPECTED_TOOL_CALL", "TOO_MANY_TOOL_CALLS")
 
 
@@ -148,18 +160,31 @@ class GeminiClient:
     supports_audio = True
     document_types = IMAGE_TYPES + (PDF_TYPE,)
 
-    def __init__(self, api_key: str, extract_model: str, analysis_model: str = "", timeout: float = 60,
+    def __init__(self, api_key: Any, extract_model: str, analysis_model: str = "", timeout: float = 60,
                  client: Any = None, analysis_timeout: float = 180):
-        self.api_key = api_key
+        """`api_key`: one key or a list of keys (failover order). `client`: an injected SDK client (tests), or a
+        list of them, one per key."""
+        keys = [api_key] if isinstance(api_key, str) else list(api_key or [])
+        self.api_keys: List[str] = [key for key in keys if key]
         self.extract_model = extract_model  # receipts, SMS, free text, voice
         self.analysis_model = analysis_model or extract_model  # Q&A and advice
         self.timeout = timeout
         self.analysis_timeout = analysis_timeout
-        self._client = client  # injected in tests; otherwise created lazily
+        self._sdks: Dict[int, Any] = {}  # key index -> genai.Client, created lazily
+        if client is not None:
+            injected = list(client) if isinstance(client, (list, tuple)) else [client]
+            self._sdks = dict(enumerate(injected))
+            self.api_keys = self.api_keys or [""] * len(injected)
+        self._active = 0  # sticky: the key that served the last request
+        self._resting: Dict[int, Tuple[float, AIError]] = {}  # key index -> (rests until, the error that benched it)
+
+    @property
+    def api_key(self) -> str:
+        return self.api_keys[0] if self.api_keys else ""
 
     @property
     def configured(self) -> bool:
-        return self._client is not None or (bool(self.api_key) and genai is not None)
+        return bool(self._sdks) or (bool(self.api_keys) and genai is not None)
 
     def accepts(self, mime_type: str) -> bool:
         return mime_type in self.document_types or audio_mime(mime_type) is not None
@@ -168,17 +193,41 @@ class GeminiClient:
     def media_limit(mime_type: str) -> int:
         return MAX_AUDIO_BYTES if audio_mime(mime_type) else MAX_MEDIA_BYTES
 
-    def _sdk(self):
+    def _sdk(self, index: int = 0):
         if not self.configured:
             raise AIError("not_configured")
-        if self._client is None:
+        if index not in self._sdks:
             # An explicit httpx transport makes the SDK skip its aiohttp path entirely (see the shim above)
             http_options = None
             if _HTTP_LIBS:
                 transport = _HTTP_LIBS[0].AsyncHTTPTransport()
                 http_options = genai_types.HttpOptions(async_client_args={"transport": transport})
-            self._client = genai.Client(api_key=self.api_key, http_options=http_options)
-        return self._client
+            self._sdks[index] = genai.Client(api_key=self.api_keys[index], http_options=http_options)
+        return self._sdks[index]
+
+    def _attempt_order(self) -> List[int]:
+        """Key indexes to try for one request: the active key first, then the others in order, skipping keys
+        that are resting. Each key appears at most once."""
+        count = max(len(self.api_keys), len(self._sdks))
+        now = _clock()
+        order = []
+        for step in range(count):
+            index = (self._active + step) % count
+            until = self._resting.get(index, (0.0, None))[0]
+            if until <= now:
+                self._resting.pop(index, None)
+                order.append(index)
+        return order
+
+    def _rest(self, index: int, err: AIError) -> None:
+        if err.code == "auth":
+            seconds = AUTH_COOLDOWN
+        else:
+            daily = "per day" in str(err).lower() or "perday" in str(err).lower()
+            seconds = DAILY_QUOTA_COOLDOWN if daily else QUOTA_COOLDOWN
+        self._resting[index] = (_clock() + seconds, err)
+        key = self.api_keys[index] if index < len(self.api_keys) else ""
+        log.warning("Gemini key #%d (...%s) failed with %s; resting %ds", index + 1, key[-4:], err.code, seconds)
 
     # ---- Requests ----
 
@@ -230,12 +279,32 @@ class GeminiClient:
         }
 
     async def _send(self, request: Dict[str, Any], timeout: float) -> Any:
-        client = self._sdk()
-        try:
-            # The SDK timeout covers the HTTP request; this guard also covers retries and slow streams
-            return await asyncio.wait_for(client.aio.models.generate_content(**request), timeout + TIMEOUT_MARGIN)
-        except Exception as err:  # SDK / network errors -> one of our codes
-            raise self._map_error(err) from err
+        """The one place that calls the SDK. On "quota" / "auth" the key is benched and the same request goes to
+        the next key (each key at most once); every other error is raised as is."""
+        if not self.configured:
+            raise AIError("not_configured")
+        order = self._attempt_order()
+        if not order:  # every key is resting: report the error of the one that comes back first
+            raise min(self._resting.values(), key=lambda item: item[0])[1]
+        last: Optional[AIError] = None
+        for index in order:
+            client = self._sdk(index)
+            try:
+                # The SDK timeout covers the HTTP request; this guard also covers retries and slow streams
+                response = await asyncio.wait_for(client.aio.models.generate_content(**request),
+                                                  timeout + TIMEOUT_MARGIN)
+            except Exception as err:  # SDK / network errors -> one of our codes
+                mapped = self._map_error(err)
+                if mapped.code not in ("quota", "auth"):
+                    raise mapped from err
+                self._rest(index, mapped)
+                last = mapped
+                continue
+            if index != self._active:
+                log.info("Gemini failed over to key #%d", index + 1)
+                self._active = index
+            return response
+        raise last
 
     async def generate(self, texts: Sequence[str], media: Sequence[Media] = (), *, system: Optional[str] = None,
                        schema: Optional[dict] = None, model: Optional[str] = None,
