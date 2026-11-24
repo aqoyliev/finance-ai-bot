@@ -48,6 +48,9 @@ def gemini_keys(keys: str = "", single: str = "") -> list:
 GEMINI_KEYS = gemini_keys(GEMINI_API_KEYS_RAW, GEMINI_API_KEY)
 GEMINI_EXTRACT_MODEL = env.str("GEMINI_EXTRACT_MODEL", default="gemini-3.5-flash-lite")  # receipts, SMS, voice
 GEMINI_ANALYSIS_MODEL = env.str("GEMINI_ANALYSIS_MODEL", default="gemini-3.8-flash")  # Ask AI, advice
+# Used when the model above stays overloaded (503) after retries or times out; empty = no fallback
+GEMINI_EXTRACT_FALLBACK_MODEL = env.str("GEMINI_EXTRACT_FALLBACK_MODEL", default="gemini-3.1-flash-lite")
+GEMINI_ANALYSIS_FALLBACK_MODEL = env.str("GEMINI_ANALYSIS_FALLBACK_MODEL", default="gemini-3.6-flash")
 GEMINI_TIMEOUT = env.int("GEMINI_TIMEOUT", default=60)  # seconds per extraction / voice request
 GEMINI_ANALYSIS_TIMEOUT = env.int("GEMINI_ANALYSIS_TIMEOUT", default=180)  # seconds per Ask AI / advice request
 

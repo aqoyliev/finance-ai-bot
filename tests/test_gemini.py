@@ -59,6 +59,18 @@ def api_error(code, message="boom", status="X"):
     return genai_errors.APIError(code, {"error": {"code": code, "message": message, "status": status}})
 
 
+@pytest.fixture(autouse=True)
+def sleeps(monkeypatch):
+    """No real pauses between retries; the requested delays are recorded."""
+    delays = []
+
+    async def fake_sleep(seconds):
+        delays.append(seconds)
+
+    monkeypatch.setattr(gemini, "_sleep", fake_sleep)
+    return delays
+
+
 @pytest.fixture
 def restore_client():
     yield
@@ -515,7 +527,8 @@ async def test_auth_error_fails_over(clock):
 
 
 async def test_other_errors_do_not_fail_over(clock):
-    client, (first, second) = multi_client([api_error(503, "overloaded", "UNAVAILABLE")], [reply(text("x"))])
+    overloaded = api_error(503, "overloaded", "UNAVAILABLE")
+    client, (first, second) = multi_client([overloaded] * 3, [reply(text("x"))])
     with pytest.raises(core.AIError) as raised:
         await client.generate(["hi"])
     assert raised.value.code == "unavailable" and not second.calls
@@ -539,3 +552,117 @@ async def test_daily_quota_rests_longer(clock):
     assert client._attempt_order() == [1]  # key 1 still resting
     clock[0] += gemini.DAILY_QUOTA_COOLDOWN
     assert client._attempt_order() == [1, 0]
+
+
+# ---- Overload: retries and fallback model ----
+
+def overloaded():
+    return api_error(503, "This model is currently experiencing high demand", "UNAVAILABLE")
+
+
+def resilient(*results, extract_fallback="fb-extract", analysis_fallback="fb-analysis"):
+    models = FakeModels(*results)
+    sdk = SimpleNamespace(aio=SimpleNamespace(models=models))
+    client = gemini.GeminiClient("", "flash-lite-x", "flash-x", client=sdk, extract_fallback_model=extract_fallback,
+                                 analysis_fallback_model=analysis_fallback)
+    return client, models
+
+
+async def test_overload_goes_straight_to_fallback(sleeps):
+    client, models = resilient(overloaded(), reply(text("from fallback")))
+    assert await client.generate(["hi"]) == "from fallback"
+    assert [c["model"] for c in models.calls] == ["flash-lite-x", "fb-extract"]
+    assert sleeps == []
+
+
+async def test_fallback_model_is_not_retried(sleeps):
+    client, models = resilient(overloaded(), overloaded(), reply(text("never")))
+    with pytest.raises(core.AIError) as raised:
+        await client.generate(["hi"])
+    assert raised.value.code == "unavailable"
+    assert [c["model"] for c in models.calls] == ["flash-lite-x", "fb-extract"] and sleeps == []
+
+
+async def test_overload_without_fallback_retries_same_model(sleeps):
+    client, models = resilient(overloaded(), reply(text("ok")), extract_fallback="")
+    assert await client.generate(["hi"]) == "ok"
+    assert [c["model"] for c in models.calls] == ["flash-lite-x"] * 2 and sleeps == [1]
+
+
+async def test_fallback_disabled_raises_after_retries(sleeps):
+    client, models = resilient(*[overloaded()] * 3, extract_fallback="")
+    with pytest.raises(core.AIError) as raised:
+        await client.generate(["hi"])
+    assert raised.value.code == "unavailable"
+    assert [c["model"] for c in models.calls] == ["flash-lite-x"] * 3 and sleeps == [1, 3]
+
+
+async def test_fallback_equal_to_primary_retries_instead(sleeps):
+    client, models = resilient(overloaded(), reply(text("ok")), extract_fallback="flash-lite-x")
+    assert await client.generate(["hi"]) == "ok" and sleeps == [1]
+
+
+async def test_timeout_goes_straight_to_fallback(sleeps):
+    import httpx
+    timeout = httpx.ReadTimeout("t", request=httpx.Request("POST", "http://x"))
+    client, models = resilient(timeout, reply(text("ok")))
+    assert await client.generate(["hi"]) == "ok"
+    assert [c["model"] for c in models.calls] == ["flash-lite-x", "fb-extract"] and sleeps == []
+
+
+async def test_timeout_without_fallback_raises(sleeps):
+    import httpx
+    timeout = httpx.ReadTimeout("t", request=httpx.Request("POST", "http://x"))
+    client, models = resilient(timeout, extract_fallback="")
+    with pytest.raises(core.AIError) as raised:
+        await client.generate(["hi"])
+    assert raised.value.code == "timeout" and len(models.calls) == 1 and sleeps == []
+
+
+async def test_unknown_model_goes_to_fallback_and_is_not_retried(sleeps):
+    client, models = resilient(api_error(404, "model not found", "NOT_FOUND"), reply(text("ok")))
+    assert await client.generate(["hi"]) == "ok"
+    assert [c["model"] for c in models.calls] == ["flash-lite-x", "fb-extract"] and sleeps == []
+
+
+async def test_unknown_model_without_fallback_is_not_retried(sleeps):
+    client, models = resilient(api_error(404, "model not found", "NOT_FOUND"), reply(text("x")), extract_fallback="")
+    with pytest.raises(core.AIError):
+        await client.generate(["hi"])
+    assert len(models.calls) == 1 and sleeps == []
+
+
+async def test_bad_input_is_not_retried(sleeps):
+    client, models = resilient(api_error(400, "bad", "INVALID_ARGUMENT"), reply(text("x")))
+    with pytest.raises(core.AIError) as raised:
+        await client.generate(["hi"])
+    assert raised.value.code == "bad_input" and len(models.calls) == 1 and sleeps == []
+
+
+async def test_analysis_first_step_uses_analysis_fallback(sleeps):
+    client, models = resilient(overloaded(), reply(text("done")))
+    step = await client.analysis_step([client.user_message("hi")], system="s", effort="low", max_tokens=100)
+    assert step.stop == "end"
+    assert [c["model"] for c in models.calls] == ["flash-x", "fb-analysis"]
+
+
+async def test_later_tool_loop_step_keeps_model(sleeps):
+    history = [gemini.GeminiClient.user_message("hi"),
+               {"role": "model", "parts": [{"function_call": {"name": "get_accounts", "args": {}}}]},
+               {"role": "user", "parts": [{"function_response": {"name": "get_accounts",
+                                                                   "response": {"output": {}}}}]}]
+    client, models = resilient(overloaded(), overloaded(), overloaded(), reply(text("never")))
+    with pytest.raises(core.AIError) as raised:
+        await client.analysis_step(history, system="s", effort="low", max_tokens=100)
+    assert raised.value.code == "unavailable"
+    assert [c["model"] for c in models.calls] == ["flash-x"] * 3 and sleeps == [1, 3]
+
+
+async def test_key_failover_inside_model_attempt(clock, sleeps):
+    quota = api_error(429, "slow down", "RESOURCE_EXHAUSTED")
+    k1 = FakeModels(quota, quota)
+    k2 = FakeModels(overloaded(), reply(text("ok")))  # 503 on key 2 -> fallback model
+    sdks = [SimpleNamespace(aio=SimpleNamespace(models=m)) for m in (k1, k2)]
+    client = gemini.GeminiClient(["k1111", "k2222"], "m", client=sdks, extract_fallback_model="fb")
+    assert await client.generate(["hi"]) == "ok"
+    assert [c["model"] for c in k2.calls] == ["m", "fb"] and len(k1.calls) == 1

@@ -358,6 +358,8 @@ budgets answer 404. initData and the token are never logged. An admin who never 
 | `GEMINI_API_KEYS` | Optional comma-separated list of extra free-tier keys (`key1,key2`); on a quota or auth error the bot switches to the next key (a quota-limited key rests for 1 minute, or 1 hour for a daily limit or an invalid key). `GEMINI_API_KEY` is appended to the list if not already in it |
 | `GEMINI_EXTRACT_MODEL` | Model for receipts, SMS, free text and voice, default `gemini-3.5-flash-lite` |
 | `GEMINI_ANALYSIS_MODEL` | Model for Ask AI and advice, default `gemini-3.8-flash` |
+| `GEMINI_EXTRACT_FALLBACK_MODEL` | Used straight away (no retries) when the extraction model is overloaded (503) or times out, default `gemini-3.1-flash-lite`; empty = no fallback |
+| `GEMINI_ANALYSIS_FALLBACK_MODEL` | Same for Ask AI and advice (first step of a request only), default `gemini-3.6-flash`; empty = no fallback |
 | `GEMINI_TIMEOUT` | Seconds per extraction / voice request, default `60` |
 | `GEMINI_ANALYSIS_TIMEOUT` | Seconds per Ask AI / advice request, default `180` |
 | `ANTHROPIC_API_KEY` | Anthropic API key ([console.anthropic.com](https://console.anthropic.com/settings/keys)); empty = AI off when the provider is `claude` |
@@ -397,6 +399,7 @@ the Dockerfile builder, restart on failure and exactly 1 replica.
    | `GEMINI_API_KEYS` | Optional. Comma-separated extra Gemini keys; the bot fails over to the next key on quota errors |
    | `GEMINI_EXTRACT_MODEL` | Model for receipts, SMS, free text, voice (default `gemini-3.5-flash-lite`) |
    | `GEMINI_ANALYSIS_MODEL` | Model for Ask AI and advice (default `gemini-3.8-flash`) |
+   | `GEMINI_EXTRACT_FALLBACK_MODEL` / `GEMINI_ANALYSIS_FALLBACK_MODEL` | Optional. Fallback models used straight away when the main one is overloaded or times out; without one, a 503 is retried twice (defaults `gemini-3.1-flash-lite` / `gemini-3.6-flash`; empty disables) |
    | `GEMINI_TIMEOUT` / `GEMINI_ANALYSIS_TIMEOUT` | Request timeouts in seconds (defaults `60` / `180`) |
    | `ANTHROPIC_API_KEY` | Claude API key; with `claude` an empty key disables AI input, Ask AI and advice |
    | `CLAUDE_EXTRACT_MODEL` | Model for receipts, SMS, free text (default `claude-haiku-5-5`) |

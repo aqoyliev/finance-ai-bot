@@ -54,6 +54,11 @@ def _clock() -> float:
     """Current time in seconds (tests replace this to move time forward)."""
     return time.time()
 
+async def _sleep(seconds: float) -> None:
+    """Pause between retries (tests replace this)."""
+    await asyncio.sleep(seconds)
+
+
 IMAGE_TYPES = ("image/jpeg", "image/png", "image/webp", "image/heic", "image/heif")
 MAX_MEDIA_BYTES = 14 * 1024 * 1024  # images and PDFs; the inline request limit is 20 MB including base64
 TIMEOUT_MARGIN = 5  # seconds on top of the SDK timeout for the outer asyncio guard
@@ -68,6 +73,8 @@ REFUSAL_REASONS = ("SAFETY", "PROHIBITED_CONTENT", "BLOCKLIST", "SPII", "RECITAT
 QUOTA_COOLDOWN = 60
 DAILY_QUOTA_COOLDOWN = 3600
 AUTH_COOLDOWN = 3600
+# Overload ("unavailable") with no fallback model possible: pauses before each same-model retry (seconds)
+RETRY_DELAYS = (1, 3)
 BAD_CALL_REASONS = ("MALFORMED_FUNCTION_CALL", "UNEXPECTED_TOOL_CALL", "TOO_MANY_TOOL_CALLS")
 
 
@@ -161,9 +168,12 @@ class GeminiClient:
     document_types = IMAGE_TYPES + (PDF_TYPE,)
 
     def __init__(self, api_key: Any, extract_model: str, analysis_model: str = "", timeout: float = 60,
-                 client: Any = None, analysis_timeout: float = 180):
+                 client: Any = None, analysis_timeout: float = 180, extract_fallback_model: str = "",
+                 analysis_fallback_model: str = ""):
         """`api_key`: one key or a list of keys (failover order). `client`: an injected SDK client (tests), or a
-        list of them, one per key."""
+        list of them, one per key. The fallback models ("" = none) take over when a model stays overloaded."""
+        self.extract_fallback_model = extract_fallback_model
+        self.analysis_fallback_model = analysis_fallback_model
         keys = [api_key] if isinstance(api_key, str) else list(api_key or [])
         self.api_keys: List[str] = [key for key in keys if key]
         self.extract_model = extract_model  # receipts, SMS, free text, voice
@@ -306,13 +316,51 @@ class GeminiClient:
             return response
         raise last
 
+    @staticmethod
+    def _has_model_turn(request: Dict[str, Any]) -> bool:
+        """True when the contents already hold a model turn (a later step of the tool loop): its thought
+        signatures belong to the model that produced them, so the request must stay on that model."""
+        for content in request.get("contents") or []:
+            role = content.get("role") if isinstance(content, dict) else getattr(content, "role", None)
+            if role == "model":
+                return True
+        return False
+
+    async def _call(self, request: Dict[str, Any], timeout: float, fallback_model: str = "") -> Any:
+        """_send() plus resilience to overload. When a fallback model is possible (set, different from the
+        request's model, and no prior model turn in the contents: see _has_model_turn), the first "unavailable"
+        or "timeout" goes straight to it, with no pause and no retry; the fallback's own error is raised. Only
+        when no fallback is possible is the same model retried after short pauses on a transient "unavailable"
+        (never on a timeout, which already took the full time)."""
+        primary = request.get("model")
+        if fallback_model and fallback_model != primary and not self._has_model_turn(request):
+            try:
+                return await self._send(request, timeout)
+            except AIError as err:
+                if err.code not in ("unavailable", "timeout"):
+                    raise
+                log.warning("Gemini model %s failed (%s); switching to fallback model %s", primary, err.code,
+                            fallback_model)
+            return await self._send({**request, "model": fallback_model}, timeout)
+        for attempt in range(len(RETRY_DELAYS) + 1):
+            try:
+                return await self._send(request, timeout)
+            except AIError as err:
+                transient = err.code == "unavailable" and not getattr(err, "permanent", False)
+                if not transient or attempt == len(RETRY_DELAYS):
+                    raise
+                delay = RETRY_DELAYS[attempt]
+                log.warning("Gemini model %s unavailable; retry %d/%d in %ss", primary, attempt + 1,
+                            len(RETRY_DELAYS), delay)
+                await _sleep(delay)
+
     async def generate(self, texts: Sequence[str], media: Sequence[Media] = (), *, system: Optional[str] = None,
                        schema: Optional[dict] = None, model: Optional[str] = None,
                        effort: Optional[str] = None, max_tokens: int = MAX_TOKENS) -> str:
         """Run one generate_content call and return the text (JSON text if `schema` is set)."""
         request = self.build_request(texts, media, system=system, schema=schema, model=model, effort=effort,
                                      max_tokens=max_tokens)
-        response = await self._send(request, self.timeout)
+        response = await self._call(request, self.timeout, self.extract_fallback_model)
         _, parts = _parts(response)
         text = _text(parts)
         if not text:
@@ -342,7 +390,7 @@ class GeminiClient:
         }
 
     async def create_analysis(self, request: Dict[str, Any]) -> Any:
-        return await self._send(request, self.analysis_timeout)
+        return await self._call(request, self.analysis_timeout, self.analysis_fallback_model)
 
     # ---- Conversation interface (see utils/ai/core.py) ----
 
@@ -426,7 +474,10 @@ class GeminiClient:
             else:
                 code = "unavailable"  # 404 unknown model, 5xx, 503 overloaded, ...
             log.warning("Gemini API error %s (%s): %s", status, code, message)
-            return AIError(code, message)
+            mapped = AIError(code, message)
+            # An unknown model will not fix itself: no same-model retries (the fallback model may still run)
+            mapped.permanent = status == 404 or reason == "NOT_FOUND"
+            return mapped
         for lib in _HTTP_LIBS:
             if isinstance(err, lib.TimeoutException):
                 return AIError("timeout", str(err))
