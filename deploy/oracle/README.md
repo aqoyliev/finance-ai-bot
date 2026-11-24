@@ -108,23 +108,33 @@ docker image prune -f             # optional: drop old image layers
 
 The whole state is one file: `deploy/oracle/data/finance.db`.
 
-Backup (stop the bot briefly so the copy is consistent):
+**Daily backup on the VM.** `backup.sh` takes an online copy with SQLite's backup API (no downtime),
+checks `pragma integrity_check`, gzips it to `backups/finance-YYYYMMDD-HHMM.db.gz` and keeps 14 days
+(`KEEP_DAYS`). Install it in root's crontab (21:15 UTC = 02:15 Tashkent):
 
 ```bash
-cd ~/finance-ai-bot/deploy/oracle
-docker compose stop bot
-cp data/finance.db ~/finance-$(date +%F).db
-docker compose start bot
+cd ~/finance-ai-bot/deploy/oracle && chmod +x backup.sh && sudo ./backup.sh   # one run to test
+line="15 21 * * * $PWD/backup.sh >> /var/log/finance-bot-backup.log 2>&1"
+{ sudo crontab -l 2>/dev/null | grep -v backup.sh || true; echo "$line"; } | sudo crontab -
 ```
 
-Copy it to your computer: `scp ubuntu@<PUBLIC_IP>:~/finance-YYYY-MM-DD.db .`
+**Copy to a Windows PC.** `pull-backups.ps1` copies `backups/*.gz` into `deploy/oracle/backups/` on the PC
+(gitignored) and logs to `pull.log` there. Schedule it daily; `-AllowStartIfOnBatteries` matters on a laptop,
+otherwise the task stays "Queued" on battery:
+
+```powershell
+$script = "D:\projects\test\deploy\oracle\pull-backups.ps1"
+$action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$script`""
+$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -MultipleInstances IgnoreNew
+Register-ScheduledTask -TaskName "FinanceBot DB backup pull" -Action $action -Trigger (New-ScheduledTaskTrigger -Daily -At 9:00) -Settings $settings
+```
 
 Restore:
 
 ```bash
 cd ~/finance-ai-bot/deploy/oracle
 docker compose stop bot
-cp ~/finance-YYYY-MM-DD.db data/finance.db
+gunzip -c backups/finance-YYYYMMDD-HHMM.db.gz > data/finance.db
 docker compose start bot
 ```
 
